@@ -4,51 +4,24 @@ import pathlib
 import logging
 import random
 
-from PyQt6.QtCore import (Qt,
-                          QRectF,
-                          QPointF,
-                          QPoint)
-from PyQt6.QtCore import pyqtSignal as pyqtSignal
-from PyQt6.QtWidgets import (QApplication,
-                             QWidget,
-                             QGraphicsScene,
-                             QGraphicsView,
-                             QGraphicsPixmapItem,
-                             QVBoxLayout,
-                             QSplitter,
-                             QTreeView,
-                             QLabel,
-                             QToolButton,
-                             QLineEdit,
-                             QToolBar,
-                             QSizePolicy)
-from PyQt6.QtGui import (QIcon,
-                         QKeyEvent,
-                         QPixmap, QShowEvent,
-                         QWheelEvent,
-                         QColor,
-                         QCursor,
-                         QShortcutEvent,
-                         QPainter,
-                         QImage,
-                         QTransform)
+from PyQt6 import QtWidgets, QtGui, QtCore
+from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
+
+from outline import OutlineModel, OutlineItem
 
 from resources import qrc_resources
-
-from viewer import PdfViewer
 
 SUPPORTED_FORMART = ("png", "jpg", "jpeg", "bmp", "tiff", "pnm", "pam", "ps", "svg",
                      "pdf", "epub", "xps", "fb2", "cbz", "txt")
 
 logger = logging.getLogger(__name__)
 
+class PdfView(QtWidgets.QGraphicsView):
 
-class DocView(QGraphicsView):
-
-    sig_page_changed = pyqtSignal()
+    sig_page_changed = Signal()
 
     def __init__(self, fitzdoc, current_page=0, parent=None):
-        super(DocView, self).__init__(parent)
+        super(PdfView, self).__init__(parent)
         
         self._current_page = current_page
 
@@ -57,31 +30,31 @@ class DocView(QGraphicsView):
         self.min_zoom_factor = 0.5
         self.zoom_factor_step = 0.25
         self.max_size = [1920,1080]
-        self.prevPoint = QPoint()
+        self.prevPoint = QtCore.QPoint()
         self.addOffset = 5
 
         self.fitzdoc: fitz.Document = fitzdoc
         self.page_count = len(self.fitzdoc)
         self.dlist: list[fitz.DisplayList] = [None] * self.page_count
 
-        self.doc_scene = QGraphicsScene(self)
+        self.doc_scene = QtWidgets.QGraphicsScene(self)
         self.setScene(self.doc_scene)
 
         self.page_pixmap_item = self.create_pixmap_item()
         self.doc_scene.addItem(self.page_pixmap_item)
 
-        self.setBackgroundBrush(QColor(242, 242, 242))
-        self.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        self.setBackgroundBrush(QtGui.QColor(242, 242, 242))
+        self.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        self.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing)
 
         self.render_page(0)
        
         self.doc_scene.setSceneRect(self.page_pixmap_item.boundingRect()) 
-        self.doc_scene.addRect(self.page_pixmap_item.boundingRect(), Qt.GlobalColor.red)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignHCenter)
+        self.doc_scene.addRect(self.page_pixmap_item.boundingRect(), QtCore.Qt.GlobalColor.red)
+        self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter | QtCore.Qt.AlignmentFlag.AlignHCenter)
         self.viewport().update()
     
-    def showEvent(self, event: QShowEvent | None) -> None:
+    def showEvent(self, event: QtGui.QShowEvent | None) -> None:
         # r = self.rect().toRectF()
         # self.doc_scene.setSceneRect(r)
         # self.doc_scene.addRect(r, Qt.GlobalColor.red)
@@ -100,16 +73,16 @@ class DocView(QGraphicsView):
             self.render_page(pno)
             self.sig_page_changed.emit()
 
-    def convert_to_QPixmap(self, fitzpix:fitz.Pixmap) -> QPixmap:
+    def convert_to_QPixmap(self, fitzpix:fitz.Pixmap) -> QtGui.QPixmap:
         fitzpix_bytes = fitzpix.tobytes()
-        pixmap = QPixmap()
+        pixmap = QtGui.QPixmap()
         r = pixmap.loadFromData(fitzpix_bytes)
         if not r:
             logger.error(f"Cannot load pixmap from data")
         return pixmap
     
-    def create_pixmap_item(self, pixmap=None, position=None, matrix=None) -> QGraphicsPixmapItem:
-        item = QGraphicsPixmapItem(pixmap)
+    def create_pixmap_item(self, pixmap=None, position=None, matrix=None) -> QtWidgets.QGraphicsPixmapItem:
+        item = QtWidgets.QGraphicsPixmapItem(pixmap)
 
         if position is not None:
             item.setPos(position)
@@ -152,7 +125,7 @@ class DocView(QGraphicsView):
         self.page_pixmap_item.setPixmap(pixmap)
 
         self.centerOn(self.page_pixmap_item)
-        self.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignCenter)
+        self.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignCenter)
         self.doc_scene.setSceneRect(self.page_pixmap_item.boundingRect()) 
         self.viewport().update()
 
@@ -162,17 +135,16 @@ class DocView(QGraphicsView):
     def previous(self):
         self.current_page -= 1
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:
-        if event.key() == Qt.Key.Key_Left:
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+        if event.key() == QtCore.Qt.Key.Key_Left:
             self.previous()
-        elif event.key() == Qt.Key.Key_Right:
+        elif event.key() == QtCore.Qt.Key.Key_Right:
             self.next()
-            
 
-    def wheelEvent(self, event: QWheelEvent) -> None:
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
         #Zoom : CTRL + wheel
-        modifiers = QApplication.keyboardModifiers()
-        if modifiers == Qt.KeyboardModifier.ControlModifier:
+        modifiers = QtWidgets.QApplication.keyboardModifiers()
+        if modifiers == QtCore.Qt.KeyboardModifier.ControlModifier:
             if event.angleDelta().y() > 0:
                 self.zoom_factor += self.zoom_factor_step
             else:
@@ -191,13 +163,13 @@ class DocView(QGraphicsView):
                 self.previous()
 
     def position(self):
-        point = self.mapFromGlobal(QCursor.pos())
+        point = self.mapFromGlobal(QtGui.QCursor.pos())
         if not self.geometry().contains(point):
             coord = random.randint(36, 144)
-            point = QPoint(coord, coord)
+            point = QtCore.QPoint(coord, coord)
         else:
             if point == self.prevPoint:
-                point += QPoint(self.addOffset, self.addOffset)
+                point += QtCore.QPoint(self.addOffset, self.addOffset)
                 self.addOffset += 5
             else:
                 self.addOffset = 5
@@ -205,52 +177,54 @@ class DocView(QGraphicsView):
         return self.mapToScene(point)
 
 
-class DocViewer(QWidget):
+class PdfViewer(QtWidgets.QWidget):
     def __init__(self, doc, parent=None):
-        super(DocViewer, self).__init__(parent)
+        super(PdfViewer, self).__init__(parent)
         self.document = doc
         self.fitzdoc: fitz.Document = fitz.Document(doc)
+        self.outline_model = OutlineModel(self.getToc())
         self.initUI()
 
     def initUI(self):
-        vbox = QVBoxLayout()
+        vbox = QtWidgets.QVBoxLayout()
 
-        docview_toolbar = QToolBar()
+        docview_toolbar = QtWidgets.QToolBar()
 
-        self.doc_view = DocView(self.fitzdoc)
+        self.doc_view = PdfView(self.fitzdoc)
         
         # self.doc_view = PdfViewer()
         # self.doc_view.loadDocument(self.document)
 
-        toolbar_separator_1 = QWidget()
-        toolbar_separator_1.setSizePolicy(QSizePolicy.Policy.Expanding,
-                                        QSizePolicy.Policy.Preferred)
+        # Toolbar
+        toolbar_separator_1 = QtWidgets.QWidget()
+        toolbar_separator_1.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
+                                          QtWidgets.QSizePolicy.Policy.Preferred)
         
-        toolbar_separator_2 = QWidget()
-        toolbar_separator_2.setSizePolicy(QSizePolicy.Policy.Expanding,
-                                        QSizePolicy.Policy.Preferred)
+        toolbar_separator_2 = QtWidgets.QWidget()
+        toolbar_separator_2.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
+                                          QtWidgets.QSizePolicy.Policy.Preferred)
         
-        self.search_in_doc = QLineEdit()
+        self.search_in_doc = QtWidgets.QLineEdit()
         self.search_in_doc.setPlaceholderText("Find in document")
         self.search_in_doc.setFixedWidth(180)
 
-        self.capture_area_btn = QToolButton()
-        self.capture_area_btn.setIcon(QIcon(':capture_area'))
-        self.mark_pen_btn = QToolButton()
-        self.mark_pen_btn.setIcon(QIcon(':mark_pen'))
+        self.capture_area_btn = QtWidgets.QToolButton()
+        self.capture_area_btn.setIcon(QtGui.QIcon(':capture_area'))
+        self.mark_pen_btn = QtWidgets.QToolButton()
+        self.mark_pen_btn.setIcon(QtGui.QIcon(':mark_pen'))
         self.mark_pen_btn.clicked.connect(self.zoom)
 
-        self.current_page = QLineEdit()
+        self.current_page = QtWidgets.QLineEdit()
         self.current_page.setFixedWidth(40)
         self.current_page.setText(str(self.doc_view.current_page+1))
         self.current_page.returnPressed.connect(self.goto_page)
         # self.page_count = QLabel(f' of {len(self.fitzdoc)}')
-        self.previous_page = QToolButton()
+        self.previous_page = QtWidgets.QToolButton()
         # self.previous_page.clicked.connect(self.doc_view.previous)
-        self.previous_page.setIcon(QIcon(':arrow-up-s-line'))
-        self.next_page = QToolButton()
+        self.previous_page.setIcon(QtGui.QIcon(':arrow-up-s-line'))
+        self.next_page = QtWidgets.QToolButton()
         # self.next_page.clicked.connect(self.doc_view.next)
-        self.next_page.setIcon(QIcon(':arrow-down-s-line'))
+        self.next_page.setIcon(QtGui.QIcon(':arrow-down-s-line'))
 
         docview_toolbar.addWidget(self.previous_page)
         docview_toolbar.addWidget(self.next_page)
@@ -263,16 +237,50 @@ class DocViewer(QWidget):
         docview_toolbar.addWidget(toolbar_separator_2)
         docview_toolbar.addWidget(self.search_in_doc)
         
-        splitter = QSplitter(Qt.Orientation.Horizontal)
+        # Left Sidebar
+        self.left_pane = QtWidgets.QTabWidget(self)
+        self.left_pane.setTabPosition(QtWidgets.QTabWidget.TabPosition.West)
+        self.left_pane.setMovable(False)
 
+        self.outline_tab = QtWidgets.QTreeView(self.left_pane)
+        self.outline_tab.setHeaderHidden(True)
+        self.outline_tab.setModel(self.outline_model)
+        for column in range(self.outline_model.columnCount()):
+            self.outline_tab.resizeColumnToContents(column)
+        
+        self.outline_tab.setHeaderHidden(True)
+        self.outline_tab.hideColumn(1)
+        self.outline_tab.hideColumn(2)
+        self.outline_tab.hideColumn(3)
+        self.outline_tab.selectionModel().selectionChanged.connect(self.onOutlineSelected)
+        self.left_pane.addTab(self.outline_tab, "Outline")
+
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        splitter.addWidget(self.left_pane)
         splitter.addWidget(self.doc_view)
-
 
         vbox.addWidget(docview_toolbar)
         vbox.addWidget(splitter)
         self.setLayout(vbox)
 
-   
+        self.getToc()
+        self.getLinks()
+
+    @Slot(QtCore.QItemSelection, QtCore.QItemSelection)
+    def onOutlineSelected(self, selected: QtCore.QItemSelection, deseleted: QtCore.QItemSelection):
+        for idx in selected.indexes():
+            item: OutlineItem = self.outline_tab.model().itemFromIndex(idx)
+
+    def getToc(self):
+        toc = self.fitzdoc.get_toc(simple=False)
+        return toc
+
+    def getLinks(self):
+        for page in self.fitzdoc:
+            for link in page.links():
+                # print(link)
+                # print(page.get_textbox(link['from']))
+                ...
         
     def connect_signals(self):
         pass
@@ -291,10 +299,10 @@ class DocViewer(QWidget):
 
 def main():
 
-    app = QApplication(sys.argv)
+    app = QtWidgets.QApplication(sys.argv)
 
     # doc = DocViewer(r"C:\Users\debru\Documents\GitHub\pymupdfviewer\resources\IPCC_AR6_WGI_FullReport_small.pdf")
-    doc = DocViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Sample_PDF.pdf")
+    doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Sample PDF.pdf")
     doc.showMaximized()
     sys.exit(app.exec())
 
