@@ -7,7 +7,7 @@ import random
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 
-from QtPymuPdf import OutlineModel, OutlineItem, PageSelector
+from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator
 
 from resources import qrc_resources
 
@@ -143,6 +143,8 @@ class PdfView(QtWidgets.QGraphicsView):
             self.next()
 
     def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        print(f"viewport height: {self.verticalScrollBar().maximum()}")
+        print(f"scroll: {self.verticalScrollBar().value()}")
         #Zoom : CTRL + wheel
         modifiers = QtWidgets.QApplication.keyboardModifiers()
         if modifiers == QtCore.Qt.KeyboardModifier.ControlModifier:
@@ -150,7 +152,6 @@ class PdfView(QtWidgets.QGraphicsView):
                 self.zoom_factor += self.zoom_factor_step
             else:
                 self.zoom_factor -= self.zoom_factor_step
-
             while self.zoom_factor >= self.max_zoom_factor:
                 self.zoom_factor -= self.zoom_factor_step
             while self.zoom_factor < self.min_zoom_factor:
@@ -158,10 +159,15 @@ class PdfView(QtWidgets.QGraphicsView):
             self.render_page(self.current_page)
         else:
             #Scroll-up and down
-            if event.angleDelta().y() < 0:
+            print(event.angleDelta().y())
+            if event.angleDelta().y() < 0 and self.verticalScrollBar().sliderPosition() == self.verticalScrollBar().maximum():
                 self.next()
-            else:
+                self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())
+            elif  event.angleDelta().y() > 0 and self.verticalScrollBar().sliderPosition() == self.verticalScrollBar().minimum():
                 self.previous()
+                self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
+            else:
+                self.verticalScrollBar().setValue(self.verticalScrollBar().sliderPosition() - event.angleDelta().y())
 
     def position(self):
         point = self.mapFromGlobal(QtGui.QCursor.pos())
@@ -190,6 +196,7 @@ class PdfViewer(QtWidgets.QWidget):
         vbox = QtWidgets.QVBoxLayout()
 
         docview_toolbar = QtWidgets.QToolBar()
+        docview_toolbar.setIconSize(QtCore.QSize(24, 24))
 
         self.doc_view = PdfView(self.fitzdoc)
         
@@ -215,25 +222,10 @@ class PdfViewer(QtWidgets.QWidget):
         self.mark_pen_btn.setIcon(QtGui.QIcon(':mark_pen'))
         self.mark_pen_btn.clicked.connect(self.zoom)
 
-        self.current_page = QtWidgets.QLineEdit()
-        self.current_page.setFixedWidth(40)
-        self.current_page.setText(str(self.doc_view.current_page+1))
-        self.current_page.returnPressed.connect(self.goto_page)
-        # self.page_count = QLabel(f' of {len(self.fitzdoc)}')
-        self.previous_page = QtWidgets.QToolButton()
-        # self.previous_page.clicked.connect(self.doc_view.previous)
-        self.previous_page.setIcon(QtGui.QIcon(':arrow-up-s-line'))
-        self.next_page = QtWidgets.QToolButton()
-        # self.next_page.clicked.connect(self.doc_view.next)
-        self.next_page.setIcon(QtGui.QIcon(':arrow-down-s-line'))
+        self.page_navigator = PageNavigator(docview_toolbar)
+        self.page_navigator.setDocument(self.fitzdoc)
 
-        # pageselector = PageSelector()
-
-        docview_toolbar.addWidget(self.previous_page)
-        docview_toolbar.addWidget(self.next_page)
-        docview_toolbar.addWidget(self.current_page)
-        # docview_toolbar.addWidget(pageselector)
-        # docview_toolbar.addWidget(self.page_count)
+        docview_toolbar.addWidget(self.page_navigator)
 
         docview_toolbar.addWidget(toolbar_separator_1)
         docview_toolbar.addWidget(self.capture_area_btn)
@@ -268,6 +260,9 @@ class PdfViewer(QtWidgets.QWidget):
 
         self.getToc()
         self.getLinks()
+        self.page_navigator.currentPageChanged.connect(self.doc_view.render_page)
+
+
 
     @Slot(QtCore.QItemSelection, QtCore.QItemSelection)
     def onOutlineSelected(self, selected: QtCore.QItemSelection, deseleted: QtCore.QItemSelection):
