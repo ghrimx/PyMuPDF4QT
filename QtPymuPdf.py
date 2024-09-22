@@ -1,5 +1,19 @@
+import fitz
 from PyQt6 import QtCore
 from PyQt6 import QtGui
+from PyQt6 import QtWidgets
+
+class PageSelector(QtWidgets.QWidget):
+    def __init__(self, parent=None):
+        ...
+
+    def setDocument(self, document: fitz.Document):
+        self._document = document
+    
+    def document(self):
+        return self._document
+
+
 
 
 class OutlineItem(QtGui.QStandardItem):
