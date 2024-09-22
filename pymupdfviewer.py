@@ -7,7 +7,7 @@ import random
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 
-from QtPymuPdf import OutlineModel, OutlineItem
+from QtPymuPdf import OutlineModel, OutlineItem, PageSelector
 
 from resources import qrc_resources
 
@@ -227,9 +227,12 @@ class PdfViewer(QtWidgets.QWidget):
         # self.next_page.clicked.connect(self.doc_view.next)
         self.next_page.setIcon(QtGui.QIcon(':arrow-down-s-line'))
 
+        # pageselector = PageSelector()
+
         docview_toolbar.addWidget(self.previous_page)
         docview_toolbar.addWidget(self.next_page)
-        docview_toolbar.addWidget(self.current_page )
+        docview_toolbar.addWidget(self.current_page)
+        # docview_toolbar.addWidget(pageselector)
         # docview_toolbar.addWidget(self.page_count)
 
         docview_toolbar.addWidget(toolbar_separator_1)
