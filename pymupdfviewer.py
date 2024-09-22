@@ -7,7 +7,7 @@ import random
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 
-from outline import OutlineModel, OutlineItem
+from QtPymuPdf import OutlineModel, OutlineItem
 
 from resources import qrc_resources
 
@@ -15,6 +15,7 @@ SUPPORTED_FORMART = ("png", "jpg", "jpeg", "bmp", "tiff", "pnm", "pam", "ps", "s
                      "pdf", "epub", "xps", "fb2", "cbz", "txt")
 
 logger = logging.getLogger(__name__)
+
 
 class PdfView(QtWidgets.QGraphicsView):
 
@@ -243,7 +244,6 @@ class PdfViewer(QtWidgets.QWidget):
         self.left_pane.setMovable(False)
 
         self.outline_tab = QtWidgets.QTreeView(self.left_pane)
-        self.outline_tab.setHeaderHidden(True)
         self.outline_tab.setModel(self.outline_model)
         for column in range(self.outline_model.columnCount()):
             self.outline_tab.resizeColumnToContents(column)

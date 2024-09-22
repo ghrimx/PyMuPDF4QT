@@ -1,5 +1,5 @@
-from PyQt6 import QtWidgets, QtGui, QtCore
-from PyQt6.QtCore import pyqtSignal as Signal
+from PyQt6 import QtCore
+from PyQt6 import QtGui
 
 
 class OutlineItem(QtGui.QStandardItem):
@@ -19,7 +19,7 @@ class OutlineModel(QtGui.QStandardItemModel):
 
         self.setupModelData(outline)
 
-    def setupModelData(self, outline: list[list]):      
+    def setupModelData(self, outline: list[list]):    
         parents: list[OutlineItem] = []
 
         prev_child = OutlineItem([0, "", 0, {}])
@@ -40,5 +40,5 @@ class OutlineModel(QtGui.QStandardItemModel):
             parent.appendRow(child)
 
             prev_child = child
-      
+              
 
