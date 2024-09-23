@@ -3,6 +3,9 @@ from PyQt6 import QtCore
 from PyQt6 import QtGui
 from PyQt6 import QtWidgets
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
+from dataclasses import dataclass
+from enum import Enum
+
 
 class PageNavigator(QtWidgets.QWidget):
     currentPageChanged = Signal(int)
@@ -12,7 +15,7 @@ class PageNavigator(QtWidgets.QWidget):
         super().__init__()
         self._current_page: int = 0
         self._current_page_label: str = ""
-        self._current_location: QtCore.QPointF = None
+        self._current_location: QtCore.QPointF = QtCore.QPointF()
 
         if parent is not None:
             icon_size = parent.iconSize()
@@ -46,8 +49,6 @@ class PageNavigator(QtWidgets.QWidget):
         self._document: fitz.Document = document
         self.pagecount_label.setText(f"of {self._document.page_count}")
 
-        self.setCurrentPage(0)
-
     def updatePageLineEdit(self):
         page_label = self.currentPageLabel()
 
@@ -78,11 +79,8 @@ class PageNavigator(QtWidgets.QWidget):
     
     def jump(self, page: int, location = QtCore.QPointF()):
         self.setCurrentPage(page)
-    
-        old_location = self._current_location
-        if old_location != location:
-            self._current_location = location
-            self.currentLocationChanged.emit(location)      
+        self._current_location = location
+        self.currentLocationChanged.emit(location)      
             
     @Slot()
     def next(self):
@@ -92,8 +90,28 @@ class PageNavigator(QtWidgets.QWidget):
     def previous(self):
         self.jump(self.currentPage() - 1, QtCore.QPointF())
 
+@dataclass
+class OutlineDetails:
 
+    class Kind(Enum):
+        LINK_NONE = 0
+        LINK_GOTO = 1
+        LINK_URI = 2
+        LINK_LAUNCH = 3
+        LINK_NAMED = 4
+        LINK_GOTOR = 5
 
+    kind: int = Kind.LINK_NONE.value
+    file: str = ""
+    page: int = 0
+    to: QtCore.QPointF = None
+    zoom: float = 0.0
+    xref: int = 0
+    color: tuple = ()
+    bold: bool = False
+    italic: bool = False
+    collapse: bool = True
+    nameddest: str = ""
 
 class OutlineItem(QtGui.QStandardItem):
     def __init__(self, data: list):
@@ -102,9 +120,18 @@ class OutlineItem(QtGui.QStandardItem):
         self.lvl: int = data[0]
         self.title: str = data[1]
         self.page: int = data[2]
-        self.dest: dict = data[3]
+        self.details = None
+
+        try:
+            self.setupDetails(data[3])
+        except:
+            pass
 
         self.setData(self.title, role=QtCore.Qt.ItemDataRole.DisplayRole)
+    
+    def setupDetails(self, details: dict):
+        self.details = OutlineDetails(**details)
+
 
 class OutlineModel(QtGui.QStandardItemModel):
     def __init__(self, outline: list[list], parent=None):

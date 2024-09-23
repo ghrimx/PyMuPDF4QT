@@ -53,7 +53,6 @@ class PdfView(QtWidgets.QGraphicsView):
         self.doc_scene.setSceneRect(self.page_pixmap_item.boundingRect()) 
         self.doc_scene.addRect(self.page_pixmap_item.boundingRect(), QtCore.Qt.GlobalColor.red)
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter | QtCore.Qt.AlignmentFlag.AlignHCenter)
-        self.viewport().update()
     
     def showEvent(self, event: QtGui.QShowEvent | None) -> None:
         # r = self.rect().toRectF()
@@ -142,33 +141,6 @@ class PdfView(QtWidgets.QGraphicsView):
         elif event.key() == QtCore.Qt.Key.Key_Right:
             self.next()
 
-    # def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
-    #     print(f"viewport height: {self.verticalScrollBar().maximum()}")
-    #     print(f"scroll: {self.verticalScrollBar().value()}")
-    #     #Zoom : CTRL + wheel
-    #     modifiers = QtWidgets.QApplication.keyboardModifiers()
-    #     if modifiers == QtCore.Qt.KeyboardModifier.ControlModifier:
-    #         if event.angleDelta().y() > 0:
-    #             self.zoom_factor += self.zoom_factor_step
-    #         else:
-    #             self.zoom_factor -= self.zoom_factor_step
-    #         while self.zoom_factor >= self.max_zoom_factor:
-    #             self.zoom_factor -= self.zoom_factor_step
-    #         while self.zoom_factor < self.min_zoom_factor:
-    #             self.zoom_factor += self.zoom_factor_step
-    #         self.render_page(self.current_page)
-    #     else:
-    #         #Scroll-up and down
-    #         print(event.angleDelta().y())
-    #         if event.angleDelta().y() < 0 and self.verticalScrollBar().sliderPosition() == self.verticalScrollBar().maximum():
-    #             self.next()
-    #             self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())
-    #         elif  event.angleDelta().y() > 0 and self.verticalScrollBar().sliderPosition() == self.verticalScrollBar().minimum():
-    #             self.previous()
-    #             self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
-    #         else:
-    #             self.verticalScrollBar().setValue(self.verticalScrollBar().sliderPosition() - event.angleDelta().y())
-
     def position(self):
         point = self.mapFromGlobal(QtGui.QCursor.pos())
         if not self.geometry().contains(point):
@@ -184,9 +156,10 @@ class PdfView(QtWidgets.QGraphicsView):
         return self.mapToScene(point)
     
     @Slot(QtCore.QPointF)
-    def scrollTo(self, location: QtCore.QPointF):
-        location = location.toPoint()
-        self.verticalScrollBar().setValue(location.y())
+    def scrollTo(self, location: QtCore.QPointF | int):
+        if isinstance(location, QtCore.QPointF):
+            location = location.toPoint().y()
+        self.verticalScrollBar().setValue(location)
 
 
 class PdfViewer(QtWidgets.QWidget):
@@ -196,6 +169,7 @@ class PdfViewer(QtWidgets.QWidget):
         self.fitzdoc: fitz.Document = fitz.Document(doc)
         self.outline_model = OutlineModel(self.getToc())
         self.initUI()
+        
 
     def initUI(self):
         vbox = QtWidgets.QVBoxLayout()
@@ -225,7 +199,7 @@ class PdfViewer(QtWidgets.QWidget):
         self.capture_area_btn.setIcon(QtGui.QIcon(':capture_area'))
         self.mark_pen_btn = QtWidgets.QToolButton()
         self.mark_pen_btn.setIcon(QtGui.QIcon(':mark_pen'))
-        self.mark_pen_btn.clicked.connect(self.zoom)
+        # self.mark_pen_btn.clicked.connect(self.zoom)
 
         self.page_navigator = PageNavigator(docview_toolbar)
         self.page_navigator.setDocument(self.fitzdoc)
@@ -269,6 +243,18 @@ class PdfViewer(QtWidgets.QWidget):
         self.page_navigator.currentPageChanged.connect(self.doc_view.render_page)
         self.page_navigator.currentLocationChanged.connect(self.doc_view.scrollTo)
 
+    def eventFilter(self, object: QtCore.QObject, event: QtCore.QEvent):
+
+        if object == self and event.type() == QtCore.QEvent.Type.KeyPress:
+            keyEvent = QtGui.QKeyEvent(event)
+            if keyEvent.key() == QtCore.Qt.Key.Key_Control:
+                # Special tab handling
+                return True
+            else:
+                return False
+
+        return False
+
     def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
         #Zoom : CTRL + wheel
         modifiers = QtWidgets.QApplication.keyboardModifiers()
@@ -290,14 +276,16 @@ class PdfViewer(QtWidgets.QWidget):
         else:
             # Scroll Down
             if event.angleDelta().y() < 0 and self.doc_view.verticalScrollBar().sliderPosition() == self.doc_view.verticalScrollBar().maximum():
-                location = QtCore.QPointF()
-                location.setY(self.doc_view.verticalScrollBar().minimum())
-                self.page_navigator.jump(self.page_navigator.currentPage() + 1, location)
+                if self.page_navigator.currentPage() < self.fitzdoc.page_count - 1:
+                    location = QtCore.QPointF()
+                    location.setY(self.doc_view.verticalScrollBar().minimum())
+                    self.page_navigator.jump(self.page_navigator.currentPage() + 1, location)
             # Scroll Up
             elif  event.angleDelta().y() > 0 and self.doc_view.verticalScrollBar().sliderPosition() == self.doc_view.verticalScrollBar().minimum():
-                location = QtCore.QPointF()
-                location.setY(self.doc_view.verticalScrollBar().maximum())
-                self.page_navigator.jump(self.page_navigator.currentPage() - 1, location)
+                if self.page_navigator.currentPage() > 0:
+                    location = QtCore.QPointF()
+                    location.setY(self.doc_view.verticalScrollBar().maximum())
+                    self.page_navigator.jump(self.page_navigator.currentPage() - 1, location)
             else:
                 self.doc_view.verticalScrollBar().setValue(self.doc_view.verticalScrollBar().sliderPosition() - event.angleDelta().y())
 
@@ -305,6 +293,8 @@ class PdfViewer(QtWidgets.QWidget):
     def onOutlineSelected(self, selected: QtCore.QItemSelection, deseleted: QtCore.QItemSelection):
         for idx in selected.indexes():
             item: OutlineItem = self.outline_tab.model().itemFromIndex(idx)
+            if item.details is not None:
+                self.page_navigator.jump(item.details.page)
 
     def getToc(self):
         toc = self.fitzdoc.get_toc(simple=False)
@@ -316,21 +306,10 @@ class PdfViewer(QtWidgets.QWidget):
                 # print(link)
                 # print(page.get_textbox(link['from']))
                 ...
-        
-    def connect_signals(self):
-        pass
 
-
-    def handle_sig_page_changed(self):
-        self.current_page.setText(str(self.doc_view.current_page+1))
-
-    def goto_page(self):
-        self.doc_view.current_page = int(self.current_page.text())-1
-
-    def zoom(self):
-        self.doc_view.scale(1.2, 1.2)
-
-    
+    def showEvent(self, event):
+        self.doc_view.scrollTo(self.doc_view.verticalScrollBar().minimum())
+        super().showEvent(event)    
 
 def main():
 
