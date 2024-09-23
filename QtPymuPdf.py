@@ -5,6 +5,59 @@ from PyQt6 import QtWidgets
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 from dataclasses import dataclass
 from enum import Enum
+from math import sqrt
+
+
+class ZoomSelector(QtWidgets.QComboBox):
+
+    class ZoomMode(Enum):
+        Custom = 0
+        FitToWidth = 1
+        FitInView = 2
+
+    zoomModeChanged = Signal(ZoomMode)
+    zoomFactorChanged = Signal(float)
+    zoom_levels = ["Fit Width", "Fit Page", "12%", "25%", "33%", "50%", "66%", "75%", "100%", "125%", "150%", "200%", "400%"]
+    zoom_multiplier = sqrt(2.0)
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setEditable(True)
+
+        for zoom_level in self.zoom_levels:
+            self.addItem(zoom_level)
+
+        self.currentTextChanged.connect(self.onCurrentTextChanged)
+        self.lineEdit().editingFinished.connect(self._editingFinished)
+
+    @Slot()
+    def _editingFinished(self):
+        self.onCurrentTextChanged(self.lineEdit().text())
+
+    @Slot(float)
+    def setZoomFactor(self, zoomFactor):
+        zoom_level = int(100 * zoomFactor)
+        self.setCurrentText(f"{zoom_level}%")
+
+    @Slot()
+    def reset(self):
+        self.setCurrentIndex(8)  # 100%
+
+    @Slot(str)
+    def onCurrentTextChanged(self, text: str):
+        if text == "Fit Width":
+            self.zoomModeChanged.emit(ZoomSelector.ZoomMode.FitToWidth)
+        elif text == "Fit Page":
+            self.zoomModeChanged.emit(ZoomSelector.ZoomMode.FitInView)
+        else:
+            factor = 1.0
+            withoutPercent = text.replace('%', '')
+            zoomLevel = int(withoutPercent)
+            if zoomLevel:
+                factor = zoomLevel / 100.0
+
+            self.zoomModeChanged.emit(ZoomSelector.ZoomMode.Custom)
+            self.zoomFactorChanged.emit(factor)
 
 
 class PageNavigator(QtWidgets.QWidget):
@@ -23,12 +76,15 @@ class PageNavigator(QtWidgets.QWidget):
             icon_size = QtCore.QSize(24, 24)
 
         hbox = QtWidgets.QHBoxLayout()
+        hbox.setSizeConstraint(QtWidgets.QLayout.SizeConstraint.SetFixedSize)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Minimum)
         self.setLayout(hbox)
         self.setContentsMargins(0, 0, 0, 0)
         
         self.currentpage_lineedit = QtWidgets.QLineEdit()
         self.currentpage_lineedit.setFixedWidth(40)
         self.pagecount_label = QtWidgets.QLabel()
+        self.pagecount_label.setFixedWidth(40)
 
         self.previous_btn = QtWidgets.QToolButton(parent)
         self.previous_btn.setIcon(QtGui.QIcon(':arrow-up-s-line'))

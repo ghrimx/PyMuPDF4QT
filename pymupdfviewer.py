@@ -6,10 +6,12 @@ import random
 
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
-
-from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator
+from enum import Enum
+from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector
 
 from resources import qrc_resources
+
+from toolbar import ToolBar
 
 SUPPORTED_FORMART = ("png", "jpg", "jpeg", "bmp", "tiff", "pnm", "pam", "ps", "svg",
                      "pdf", "epub", "xps", "fb2", "cbz", "txt")
@@ -174,23 +176,11 @@ class PdfViewer(QtWidgets.QWidget):
     def initUI(self):
         vbox = QtWidgets.QVBoxLayout()
 
-        docview_toolbar = QtWidgets.QToolBar()
-        docview_toolbar.setIconSize(QtCore.QSize(24, 24))
+        self._toolbar = ToolBar(self, icon_size=(24, 24))
 
         self.doc_view = PdfView(self.fitzdoc)
-        
-        # self.doc_view = PdfViewer()
-        # self.doc_view.loadDocument(self.document)
 
-        # Toolbar
-        toolbar_separator_1 = QtWidgets.QWidget()
-        toolbar_separator_1.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
-                                          QtWidgets.QSizePolicy.Policy.Preferred)
-        
-        toolbar_separator_2 = QtWidgets.QWidget()
-        toolbar_separator_2.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
-                                          QtWidgets.QSizePolicy.Policy.Preferred)
-        
+        # Toolbar button        
         self.search_in_doc = QtWidgets.QLineEdit()
         self.search_in_doc.setPlaceholderText("Find in document")
         self.search_in_doc.setFixedWidth(180)
@@ -201,16 +191,18 @@ class PdfViewer(QtWidgets.QWidget):
         self.mark_pen_btn.setIcon(QtGui.QIcon(':mark_pen'))
         # self.mark_pen_btn.clicked.connect(self.zoom)
 
-        self.page_navigator = PageNavigator(docview_toolbar)
+        self.page_navigator = PageNavigator(self._toolbar)
         self.page_navigator.setDocument(self.fitzdoc)
 
-        docview_toolbar.addWidget(self.page_navigator)
+        self.zoom_selector = ZoomSelector(self._toolbar)
 
-        docview_toolbar.addWidget(toolbar_separator_1)
-        docview_toolbar.addWidget(self.capture_area_btn)
-        docview_toolbar.addWidget(self.mark_pen_btn)
-        docview_toolbar.addWidget(toolbar_separator_2)
-        docview_toolbar.addWidget(self.search_in_doc)
+        self._toolbar.addWidget(self.page_navigator)
+        self._toolbar.addWidget(self.zoom_selector)
+        self._toolbar.add_spacer()
+        self._toolbar.addWidget(self.capture_area_btn)
+        self._toolbar.addWidget(self.mark_pen_btn)
+        self._toolbar.add_spacer()
+        self._toolbar.addWidget(self.search_in_doc)
         
         # Left Sidebar
         self.left_pane = QtWidgets.QTabWidget(self)
@@ -233,7 +225,7 @@ class PdfViewer(QtWidgets.QWidget):
         splitter.addWidget(self.left_pane)
         splitter.addWidget(self.doc_view)
 
-        vbox.addWidget(docview_toolbar)
+        vbox.addWidget(self._toolbar)
         vbox.addWidget(splitter)
         self.setLayout(vbox)
 
@@ -243,11 +235,12 @@ class PdfViewer(QtWidgets.QWidget):
         self.page_navigator.currentPageChanged.connect(self.doc_view.render_page)
         self.page_navigator.currentLocationChanged.connect(self.doc_view.scrollTo)
 
-    def eventFilter(self, object: QtCore.QObject, event: QtCore.QEvent):
+        self.installEventFilter(self)
 
-        if object == self and event.type() == QtCore.QEvent.Type.KeyPress:
-            keyEvent = QtGui.QKeyEvent(event)
-            if keyEvent.key() == QtCore.Qt.Key.Key_Control:
+    def eventFilter(self, object: QtCore.QObject, event: QtCore.QEvent):
+        if object == self and event.type() == QtCore.QEvent.Type.Wheel:
+            modifiers = QtWidgets.QApplication.keyboardModifiers()
+            if modifiers == QtCore.Qt.KeyboardModifier.ControlModifier:
                 # Special tab handling
                 return True
             else:
@@ -315,8 +308,8 @@ def main():
 
     app = QtWidgets.QApplication(sys.argv)
 
-    # doc = DocViewer(r"C:\Users\debru\Documents\GitHub\pymupdfviewer\resources\IPCC_AR6_WGI_FullReport_small.pdf")
-    doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Sample PDF.pdf")
+    # doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Sample PDF.pdf")
+    doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Master File.pdf")
     doc.showMaximized()
     sys.exit(app.exec())
 
