@@ -29,11 +29,11 @@ class PageNavigator(QtWidgets.QWidget):
         self.previous = QtWidgets.QToolButton(parent)
         self.previous.setIcon(QtGui.QIcon(':arrow-up-s-line'))
         self.previous.setIconSize(icon_size)
-        self.previous.clicked.connect(self.onPreviousPage)
+        self.previous.clicked.connect(self.onPreviousPageTriggered)
         self.next = QtWidgets.QToolButton(parent)
         self.next.setIcon(QtGui.QIcon(':arrow-down-s-line'))
         self.next.setIconSize(icon_size)
-        self.next.clicked.connect(self.onNextPage)
+        self.next.clicked.connect(self.onNextPageTriggered)
 
         hbox.addWidget(self.previous)
         hbox.addWidget(self.next)
@@ -41,11 +41,11 @@ class PageNavigator(QtWidgets.QWidget):
         hbox.addWidget(self.pagecount_label)
 
     @Slot()
-    def onNextPage(self):
+    def onNextPageTriggered(self):
         self.jump(self.currentPage() + 1)
 
     @Slot()
-    def onPreviousPage(self):
+    def onPreviousPageTriggered(self):
         self.jump(self.currentPage() - 1)
 
     def setDocument(self, document: fitz.Document):
