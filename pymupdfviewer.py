@@ -142,32 +142,32 @@ class PdfView(QtWidgets.QGraphicsView):
         elif event.key() == QtCore.Qt.Key.Key_Right:
             self.next()
 
-    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
-        print(f"viewport height: {self.verticalScrollBar().maximum()}")
-        print(f"scroll: {self.verticalScrollBar().value()}")
-        #Zoom : CTRL + wheel
-        modifiers = QtWidgets.QApplication.keyboardModifiers()
-        if modifiers == QtCore.Qt.KeyboardModifier.ControlModifier:
-            if event.angleDelta().y() > 0:
-                self.zoom_factor += self.zoom_factor_step
-            else:
-                self.zoom_factor -= self.zoom_factor_step
-            while self.zoom_factor >= self.max_zoom_factor:
-                self.zoom_factor -= self.zoom_factor_step
-            while self.zoom_factor < self.min_zoom_factor:
-                self.zoom_factor += self.zoom_factor_step
-            self.render_page(self.current_page)
-        else:
-            #Scroll-up and down
-            print(event.angleDelta().y())
-            if event.angleDelta().y() < 0 and self.verticalScrollBar().sliderPosition() == self.verticalScrollBar().maximum():
-                self.next()
-                self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())
-            elif  event.angleDelta().y() > 0 and self.verticalScrollBar().sliderPosition() == self.verticalScrollBar().minimum():
-                self.previous()
-                self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
-            else:
-                self.verticalScrollBar().setValue(self.verticalScrollBar().sliderPosition() - event.angleDelta().y())
+    # def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+    #     print(f"viewport height: {self.verticalScrollBar().maximum()}")
+    #     print(f"scroll: {self.verticalScrollBar().value()}")
+    #     #Zoom : CTRL + wheel
+    #     modifiers = QtWidgets.QApplication.keyboardModifiers()
+    #     if modifiers == QtCore.Qt.KeyboardModifier.ControlModifier:
+    #         if event.angleDelta().y() > 0:
+    #             self.zoom_factor += self.zoom_factor_step
+    #         else:
+    #             self.zoom_factor -= self.zoom_factor_step
+    #         while self.zoom_factor >= self.max_zoom_factor:
+    #             self.zoom_factor -= self.zoom_factor_step
+    #         while self.zoom_factor < self.min_zoom_factor:
+    #             self.zoom_factor += self.zoom_factor_step
+    #         self.render_page(self.current_page)
+    #     else:
+    #         #Scroll-up and down
+    #         print(event.angleDelta().y())
+    #         if event.angleDelta().y() < 0 and self.verticalScrollBar().sliderPosition() == self.verticalScrollBar().maximum():
+    #             self.next()
+    #             self.verticalScrollBar().setValue(self.verticalScrollBar().minimum())
+    #         elif  event.angleDelta().y() > 0 and self.verticalScrollBar().sliderPosition() == self.verticalScrollBar().minimum():
+    #             self.previous()
+    #             self.verticalScrollBar().setValue(self.verticalScrollBar().maximum())
+    #         else:
+    #             self.verticalScrollBar().setValue(self.verticalScrollBar().sliderPosition() - event.angleDelta().y())
 
     def position(self):
         point = self.mapFromGlobal(QtGui.QCursor.pos())
@@ -182,6 +182,11 @@ class PdfView(QtWidgets.QGraphicsView):
                 self.addOffset = 5
                 self.prevPoint = point
         return self.mapToScene(point)
+    
+    @Slot(QtCore.QPointF)
+    def scrollTo(self, location: QtCore.QPointF):
+        location = location.toPoint()
+        self.verticalScrollBar().setValue(location.y())
 
 
 class PdfViewer(QtWidgets.QWidget):
@@ -260,9 +265,41 @@ class PdfViewer(QtWidgets.QWidget):
 
         self.getToc()
         self.getLinks()
+        
         self.page_navigator.currentPageChanged.connect(self.doc_view.render_page)
+        self.page_navigator.currentLocationChanged.connect(self.doc_view.scrollTo)
 
-
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        #Zoom : CTRL + wheel
+        modifiers = QtWidgets.QApplication.keyboardModifiers()
+        if modifiers == QtCore.Qt.KeyboardModifier.ControlModifier:
+            pointer_position: QtCore.QPointF = event.globalPosition()
+            anchor = self.doc_view.transformationAnchor()
+            self.doc_view.setTransformationAnchor(QtWidgets.QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+            if event.angleDelta().y() > 0:
+                self.doc_view.zoom_factor += self.doc_view.zoom_factor_step
+            else:
+                self.doc_view.zoom_factor -= self.doc_view.zoom_factor_step
+            while self.doc_view.zoom_factor >= self.doc_view.max_zoom_factor:
+                self.doc_view.zoom_factor -= self.doc_view.zoom_factor_step
+            while self.doc_view.zoom_factor < self.doc_view.min_zoom_factor:
+                self.doc_view.zoom_factor += self.doc_view.zoom_factor_step
+            self.doc_view.render_page(self.doc_view.current_page)
+            self.doc_view.setTransformationAnchor(anchor)
+            # self.doc_view.centerOn(self.doc_view.mapFromGlobal(pointer_position))
+        else:
+            # Scroll Down
+            if event.angleDelta().y() < 0 and self.doc_view.verticalScrollBar().sliderPosition() == self.doc_view.verticalScrollBar().maximum():
+                location = QtCore.QPointF()
+                location.setY(self.doc_view.verticalScrollBar().minimum())
+                self.page_navigator.jump(self.page_navigator.currentPage() + 1, location)
+            # Scroll Up
+            elif  event.angleDelta().y() > 0 and self.doc_view.verticalScrollBar().sliderPosition() == self.doc_view.verticalScrollBar().minimum():
+                location = QtCore.QPointF()
+                location.setY(self.doc_view.verticalScrollBar().maximum())
+                self.page_navigator.jump(self.page_navigator.currentPage() - 1, location)
+            else:
+                self.doc_view.verticalScrollBar().setValue(self.doc_view.verticalScrollBar().sliderPosition() - event.angleDelta().y())
 
     @Slot(QtCore.QItemSelection, QtCore.QItemSelection)
     def onOutlineSelected(self, selected: QtCore.QItemSelection, deseleted: QtCore.QItemSelection):

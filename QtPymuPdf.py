@@ -6,9 +6,13 @@ from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 
 class PageNavigator(QtWidgets.QWidget):
     currentPageChanged = Signal(int)
+    currentLocationChanged = Signal(QtCore.QPointF)
 
     def __init__(self, parent: QtWidgets.QToolBar = None):
         super().__init__()
+        self._current_page: int = 0
+        self._current_page_label: str = ""
+        self._current_location: QtCore.QPointF = None
 
         if parent is not None:
             icon_size = parent.iconSize()
@@ -18,35 +22,25 @@ class PageNavigator(QtWidgets.QWidget):
         hbox = QtWidgets.QHBoxLayout()
         self.setLayout(hbox)
         self.setContentsMargins(0, 0, 0, 0)
-
-        self._current_page: int = 0
-        self._current_page_label: str = ""
         
         self.currentpage_lineedit = QtWidgets.QLineEdit()
         self.currentpage_lineedit.setFixedWidth(40)
         self.pagecount_label = QtWidgets.QLabel()
 
-        self.previous = QtWidgets.QToolButton(parent)
-        self.previous.setIcon(QtGui.QIcon(':arrow-up-s-line'))
-        self.previous.setIconSize(icon_size)
-        self.previous.clicked.connect(self.onPreviousPageTriggered)
-        self.next = QtWidgets.QToolButton(parent)
-        self.next.setIcon(QtGui.QIcon(':arrow-down-s-line'))
-        self.next.setIconSize(icon_size)
-        self.next.clicked.connect(self.onNextPageTriggered)
+        self.previous_btn = QtWidgets.QToolButton(parent)
+        self.previous_btn.setIcon(QtGui.QIcon(':arrow-up-s-line'))
+        self.previous_btn.setIconSize(icon_size)
+        self.previous_btn.clicked.connect(self.previous)
 
-        hbox.addWidget(self.previous)
-        hbox.addWidget(self.next)
+        self.next_btn = QtWidgets.QToolButton(parent)
+        self.next_btn.setIcon(QtGui.QIcon(':arrow-down-s-line'))
+        self.next_btn.setIconSize(icon_size)
+        self.next_btn.clicked.connect(self.next)
+
+        hbox.addWidget(self.previous_btn)
+        hbox.addWidget(self.next_btn)
         hbox.addWidget(self.currentpage_lineedit)
         hbox.addWidget(self.pagecount_label)
-
-    @Slot()
-    def onNextPageTriggered(self):
-        self.jump(self.currentPage() + 1)
-
-    @Slot()
-    def onPreviousPageTriggered(self):
-        self.jump(self.currentPage() - 1)
 
     def setDocument(self, document: fitz.Document):
         self._document: fitz.Document = document
@@ -82,8 +76,23 @@ class PageNavigator(QtWidgets.QWidget):
     def currentPage(self) -> int:
         return self._current_page
     
-    def jump(self, page: int, location: QtCore.QPointF = None):
-        self.setCurrentPage(page)        
+    def jump(self, page: int, location = QtCore.QPointF()):
+        self.setCurrentPage(page)
+    
+        old_location = self._current_location
+        if old_location != location:
+            self._current_location = location
+            self.currentLocationChanged.emit(location)      
+            
+    @Slot()
+    def next(self):
+        self.jump(self.currentPage() + 1, QtCore.QPointF())
+
+    @Slot()
+    def previous(self):
+        self.jump(self.currentPage() - 1, QtCore.QPointF())
+
+
 
 
 class OutlineItem(QtGui.QStandardItem):
