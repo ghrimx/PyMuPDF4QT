@@ -7,7 +7,7 @@ import random
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 from enum import Enum
-from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector
+from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, GoToLink, LinkFactory
 
 from resources import qrc_resources
 
@@ -294,11 +294,20 @@ class PdfViewer(QtWidgets.QWidget):
         return toc
 
     def getLinks(self):
+        links: list[GoToLink] = []
+
+        link_factory = LinkFactory()
+
         for page in self.fitzdoc:
             for link in page.links():
-                # print(link)
-                # print(page.get_textbox(link['from']))
-                ...
+                l = link_factory.createLink(link, page)
+                links.append(l)
+                print(l.label)
+
+        # for page in self.fitzdoc:
+        #     for link in page.links([fitz.LINK_NAMED]):
+        #         print(link)
+
 
     def showEvent(self, event):
         self.doc_view.scrollTo(self.doc_view.verticalScrollBar().minimum())
@@ -309,7 +318,8 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
 
     # doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Sample PDF.pdf")
-    doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Master File.pdf")
+    # doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Master File.pdf")
+    doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\PSMF_BBL_PV_04-Sep-2024.pdf")
     doc.showMaximized()
     sys.exit(app.exec())
 

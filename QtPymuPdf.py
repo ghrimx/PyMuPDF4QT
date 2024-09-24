@@ -3,7 +3,7 @@ from PyQt6 import QtCore
 from PyQt6 import QtGui
 from PyQt6 import QtWidgets
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
-from dataclasses import dataclass
+from dataclasses import dataclass, InitVar
 from enum import Enum
 from math import sqrt
 
@@ -146,21 +146,20 @@ class PageNavigator(QtWidgets.QWidget):
     def previous(self):
         self.jump(self.currentPage() - 1, QtCore.QPointF())
 
+class Kind(Enum):
+    LINK_NONE = 0
+    LINK_GOTO = 1
+    LINK_URI = 2
+    LINK_LAUNCH = 3
+    LINK_NAMED = 4
+    LINK_GOTOR = 5
+
 @dataclass
 class OutlineDetails:
-
-    class Kind(Enum):
-        LINK_NONE = 0
-        LINK_GOTO = 1
-        LINK_URI = 2
-        LINK_LAUNCH = 3
-        LINK_NAMED = 4
-        LINK_GOTOR = 5
-
     kind: int = Kind.LINK_NONE.value
     file: str = ""
     page: int = 0
-    to: QtCore.QPointF = None
+    to: fitz.Point = None
     zoom: float = 0.0
     xref: int = 0
     color: tuple = ()
@@ -216,5 +215,68 @@ class OutlineModel(QtGui.QStandardItemModel):
             parent.appendRow(child)
 
             prev_child = child
-              
 
+
+@dataclass
+class GoToLink:
+    kind: Kind = Kind.LINK_GOTO
+    xref: int = 0
+    hotspot: QtCore.QRect = None
+    page_to: int = 0
+    to: QtCore.QPointF = None
+    zoom: float = 1.0
+    id: str = ""
+    page: InitVar[fitz.Page | None] = None
+    page_from: int = 0
+    label: str = ""
+
+    def __post_init__(self, page: fitz.Page):
+        self.page_from = page.number
+        self.label = page.get_textbox(self.hotspot)
+
+@dataclass
+class UriLink:
+    kind: Kind = Kind.LINK_URI
+    xref: int = 0
+    hotspot: QtCore.QRect = None
+    uri: str = ""
+    id: str = ""
+    page: InitVar[fitz.Page | None] = None
+    page_from: int = 0
+    label: str = ""
+
+    def __post_init__(self, page: fitz.Page):
+        self.page_from = page.number
+        self.label = page.get_textbox(self.hotspot)
+
+@dataclass
+class NamedLink:
+    kind: Kind = Kind.LINK_NAMED
+    xref: int = 0
+    hotspot: QtCore.QRect = None
+    page_to: int = 0
+    to: QtCore.QPointF = None
+    zoom: float = 1.0
+    nameddest: str = ""
+    id: str = ""
+    page: InitVar[fitz.Page | None] = None
+    page_from: int = 0
+    label: str = ""
+
+    def __post_init__(self, page: fitz.Page):
+        self.page_from = page.number
+        self.label = page.get_textbox(self.hotspot)
+
+class LinkFactory:
+    def __init__(self):
+        self.link_types = {}
+
+        link_type: GoToLink | UriLink | NamedLink
+        for link_type in [GoToLink, UriLink, NamedLink]:
+            self.link_types[link_type.kind] = link_type
+
+    def createLink(self, link: dict, page: fitz.Page):
+        val: GoToLink | UriLink | NamedLink
+        for key, val in self.link_types.items():
+            if link['kind'] == key.value:
+                return val(*link.values(), page)
