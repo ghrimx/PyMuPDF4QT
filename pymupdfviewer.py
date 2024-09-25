@@ -150,6 +150,41 @@ class PdfView(QtWidgets.QGraphicsView):
         elif event.key() == QtCore.Qt.Key.Key_Right:
             self.next()
 
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        #Zoom : CTRL + wheel
+        modifiers = QtWidgets.QApplication.keyboardModifiers()
+        if modifiers == QtCore.Qt.KeyboardModifier.ControlModifier:
+            pointer_position: QtCore.QPointF = event.globalPosition()
+            anchor = self.transformationAnchor()
+            self.setTransformationAnchor(QtWidgets.QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+            if event.angleDelta().y() > 0:
+                self.zoom_factor += self.zoom_factor_step
+            else:
+                self.zoom_factor -= self.zoom_factor_step
+            while self.zoom_factor >= self.max_zoom_factor:
+                self.zoom_factor -= self.zoom_factor_step
+            while self.zoom_factor < self.min_zoom_factor:
+                self.zoom_factor += self.zoom_factor_step
+            self.render_page(self.current_page)
+            self.setTransformationAnchor(anchor)
+            # self.doc_view.centerOn(self.doc_view.mapFromGlobal(pointer_position))
+        else:
+            # Scroll Down
+            if event.angleDelta().y() < 0 and self.verticalScrollBar().sliderPosition() == self.verticalScrollBar().maximum():
+                if self.pageNavigator().currentPage() < self.fitzdoc.page_count - 1:
+                    location = QtCore.QPointF()
+                    location.setY(self.verticalScrollBar().minimum())
+                    self.pageNavigator().jump(self.pageNavigator().currentPage() + 1, location)
+            # Scroll Up
+            elif  event.angleDelta().y() > 0 and self.verticalScrollBar().sliderPosition() == self.verticalScrollBar().minimum():
+                if self.pageNavigator().currentPage() > 0:
+                    location = QtCore.QPointF()
+                    location.setY(self.verticalScrollBar().maximum())
+                    self.pageNavigator().jump(self.pageNavigator().currentPage() - 1, location)
+            else:
+                self.verticalScrollBar().setValue(self.verticalScrollBar().sliderPosition() - event.angleDelta().y())
+
+
     def position(self):
         point = self.mapFromGlobal(QtGui.QCursor.pos())
         if not self.geometry().contains(point):
@@ -174,7 +209,7 @@ class PdfView(QtWidgets.QGraphicsView):
 class PdfViewer(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super(PdfViewer, self).__init__(parent)
-        
+
         self.initUI()
 
     def loadDocument(self, doc: QtCore.QFile):
@@ -255,40 +290,7 @@ class PdfViewer(QtWidgets.QWidget):
 
         return False
 
-    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
-        #Zoom : CTRL + wheel
-        modifiers = QtWidgets.QApplication.keyboardModifiers()
-        if modifiers == QtCore.Qt.KeyboardModifier.ControlModifier:
-            pointer_position: QtCore.QPointF = event.globalPosition()
-            anchor = self.doc_view.transformationAnchor()
-            self.doc_view.setTransformationAnchor(QtWidgets.QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-            if event.angleDelta().y() > 0:
-                self.doc_view.zoom_factor += self.doc_view.zoom_factor_step
-            else:
-                self.doc_view.zoom_factor -= self.doc_view.zoom_factor_step
-            while self.doc_view.zoom_factor >= self.doc_view.max_zoom_factor:
-                self.doc_view.zoom_factor -= self.doc_view.zoom_factor_step
-            while self.doc_view.zoom_factor < self.doc_view.min_zoom_factor:
-                self.doc_view.zoom_factor += self.doc_view.zoom_factor_step
-            self.doc_view.render_page(self.doc_view.current_page)
-            self.doc_view.setTransformationAnchor(anchor)
-            # self.doc_view.centerOn(self.doc_view.mapFromGlobal(pointer_position))
-        else:
-            # Scroll Down
-            if event.angleDelta().y() < 0 and self.doc_view.verticalScrollBar().sliderPosition() == self.doc_view.verticalScrollBar().maximum():
-                if self.page_navigator.currentPage() < self.fitzdoc.page_count - 1:
-                    location = QtCore.QPointF()
-                    location.setY(self.doc_view.verticalScrollBar().minimum())
-                    self.page_navigator.jump(self.page_navigator.currentPage() + 1, location)
-            # Scroll Up
-            elif  event.angleDelta().y() > 0 and self.doc_view.verticalScrollBar().sliderPosition() == self.doc_view.verticalScrollBar().minimum():
-                if self.page_navigator.currentPage() > 0:
-                    location = QtCore.QPointF()
-                    location.setY(self.doc_view.verticalScrollBar().maximum())
-                    self.page_navigator.jump(self.page_navigator.currentPage() - 1, location)
-            else:
-                self.doc_view.verticalScrollBar().setValue(self.doc_view.verticalScrollBar().sliderPosition() - event.angleDelta().y())
-
+    
     @Slot(QtCore.QItemSelection, QtCore.QItemSelection)
     def onOutlineSelected(self, selected: QtCore.QItemSelection, deseleted: QtCore.QItemSelection):
         for idx in selected.indexes():
