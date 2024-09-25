@@ -216,14 +216,13 @@ class OutlineModel(QtGui.QStandardItemModel):
 
             prev_child = child
 
-
 @dataclass
 class GoToLink:
     kind: Kind = Kind.LINK_GOTO
     xref: int = 0
-    hotspot: QtCore.QRect = None
+    hotspot: fitz.Rect = None
     page_to: int = 0
-    to: QtCore.QPointF = None
+    to: fitz.Point = None
     zoom: float = 1.0
     id: str = ""
     page: InitVar[fitz.Page | None] = None
@@ -232,13 +231,16 @@ class GoToLink:
 
     def __post_init__(self, page: fitz.Page):
         self.page_from = page.number
-        self.label = page.get_textbox(self.hotspot)
+        height_correction = self.hotspot.height * 0.1
+        rect = self.hotspot + [0, height_correction, 0, -height_correction]
+        label: str = page.get_textbox(rect)
+        self.label = label.strip().replace("\n", " ")
 
 @dataclass
 class UriLink:
     kind: Kind = Kind.LINK_URI
     xref: int = 0
-    hotspot: QtCore.QRect = None
+    hotspot: fitz.Rect = None
     uri: str = ""
     id: str = ""
     page: InitVar[fitz.Page | None] = None
@@ -247,15 +249,18 @@ class UriLink:
 
     def __post_init__(self, page: fitz.Page):
         self.page_from = page.number
-        self.label = page.get_textbox(self.hotspot)
+        height_correction = self.hotspot.height * 0.1
+        rect = self.hotspot + [0, height_correction, 0, -height_correction]
+        label: str = page.get_textbox(rect)
+        self.label = label.strip().replace("\n", " ")
 
 @dataclass
 class NamedLink:
     kind: Kind = Kind.LINK_NAMED
     xref: int = 0
-    hotspot: QtCore.QRect = None
+    hotspot: fitz.Rect = None
     page_to: int = 0
-    to: QtCore.QPointF = None
+    to: fitz.Point = None
     zoom: float = 1.0
     nameddest: str = ""
     id: str = ""
@@ -265,7 +270,10 @@ class NamedLink:
 
     def __post_init__(self, page: fitz.Page):
         self.page_from = page.number
-        self.label = page.get_textbox(self.hotspot)
+        height_correction = - self.hotspot.height * 0.1
+        rect = self.hotspot + [0, height_correction, 0, -height_correction]
+        label: str = page.get_textbox(rect)
+        self.label = label.strip().replace("\n", " ")
 
 class LinkFactory:
     def __init__(self):
@@ -280,3 +288,23 @@ class LinkFactory:
         for key, val in self.link_types.items():
             if link['kind'] == key.value:
                 return val(*link.values(), page)
+            
+class LinkItem(QtGui.QStandardItem):
+    def __init__(self, link: GoToLink | UriLink | NamedLink):
+        super().__init__()
+        self.link = link
+
+        self.setData(self.link.label, role=QtCore.Qt.ItemDataRole.DisplayRole)
+
+class LinkModel(QtGui.QStandardItemModel):
+    def __init__(self, links: list[GoToLink | UriLink | NamedLink], parent=None):
+        super().__init__(parent)
+
+        self.setupModelData(links)
+
+    def setupModelData(self, links: list[GoToLink | UriLink | NamedLink]):    
+        parent = self.invisibleRootItem()
+
+        for link in links:
+            link_item = LinkItem(link)
+            parent.appendRow(link_item)

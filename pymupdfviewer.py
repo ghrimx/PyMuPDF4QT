@@ -7,7 +7,7 @@ import random
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 from enum import Enum
-from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, GoToLink, LinkFactory
+from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, LinkFactory, LinkModel
 
 from resources import qrc_resources
 
@@ -170,6 +170,7 @@ class PdfViewer(QtWidgets.QWidget):
         self.document = doc
         self.fitzdoc: fitz.Document = fitz.Document(doc)
         self.outline_model = OutlineModel(self.getToc())
+        self.link_model = LinkModel(self.getLinks())
         self.initUI()
         
 
@@ -220,6 +221,12 @@ class PdfViewer(QtWidgets.QWidget):
         self.outline_tab.hideColumn(3)
         self.outline_tab.selectionModel().selectionChanged.connect(self.onOutlineSelected)
         self.left_pane.addTab(self.outline_tab, "Outline")
+
+        self.link_tab = QtWidgets.QTreeView(self.left_pane)
+        self.link_tab.setModel(self.link_model)
+        self.link_tab.setHeaderHidden(True)
+        # self.link_tab.selectionModel().selectionChanged.connect(self.onLinkSelected)
+        self.left_pane.addTab(self.link_tab, "Links")
 
         splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.addWidget(self.left_pane)
@@ -293,21 +300,17 @@ class PdfViewer(QtWidgets.QWidget):
         toc = self.fitzdoc.get_toc(simple=False)
         return toc
 
-    def getLinks(self):
-        links: list[GoToLink] = []
+    def getLinks(self) -> list:
+        links = []
 
         link_factory = LinkFactory()
 
         for page in self.fitzdoc:
             for link in page.links():
-                l = link_factory.createLink(link, page)
-                links.append(l)
-                print(l.label)
+                link_item = link_factory.createLink(link, page)
+                links.append(link_item)
 
-        # for page in self.fitzdoc:
-        #     for link in page.links([fitz.LINK_NAMED]):
-        #         print(link)
-
+        return links
 
     def showEvent(self, event):
         self.doc_view.scrollTo(self.doc_view.verticalScrollBar().minimum())
