@@ -292,9 +292,12 @@ class LinkFactory:
 class LinkItem(QtGui.QStandardItem):
     def __init__(self, link: GoToLink | UriLink | NamedLink):
         super().__init__()
-        self.link = link
+        self._link = link
 
-        self.setData(self.link.label, role=QtCore.Qt.ItemDataRole.DisplayRole)
+        self.setData(self._link.label, role=QtCore.Qt.ItemDataRole.DisplayRole)
+    
+    def link(self):
+        return self._link
 
 class LinkModel(QtGui.QStandardItemModel):
     def __init__(self, links: list[GoToLink | UriLink | NamedLink], parent=None):

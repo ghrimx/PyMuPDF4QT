@@ -7,7 +7,7 @@ import random
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 from enum import Enum
-from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, LinkFactory, LinkModel
+from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, LinkFactory, LinkModel, LinkItem, GoToLink, NamedLink
 
 from resources import qrc_resources
 
@@ -225,7 +225,7 @@ class PdfViewer(QtWidgets.QWidget):
         self.link_tab = QtWidgets.QTreeView(self.left_pane)
         self.link_tab.setModel(self.link_model)
         self.link_tab.setHeaderHidden(True)
-        # self.link_tab.selectionModel().selectionChanged.connect(self.onLinkSelected)
+        self.link_tab.selectionModel().selectionChanged.connect(self.onLinkSelected)
         self.left_pane.addTab(self.link_tab, "Links")
 
         splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
@@ -295,6 +295,14 @@ class PdfViewer(QtWidgets.QWidget):
             item: OutlineItem = self.outline_tab.model().itemFromIndex(idx)
             if item.details is not None:
                 self.page_navigator.jump(item.details.page)
+
+    @Slot(QtCore.QItemSelection, QtCore.QItemSelection)
+    def onLinkSelected(self, selected: QtCore.QItemSelection, deseleted: QtCore.QItemSelection):
+        for idx in selected.indexes():
+            item: LinkItem = self.link_tab.model().itemFromIndex(idx)
+            link = item.link()
+            if isinstance(link, (GoToLink, NamedLink)):
+                self.page_navigator.jump(link.page_to)
 
     def getToc(self):
         toc = self.fitzdoc.get_toc(simple=False)
