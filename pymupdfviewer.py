@@ -23,10 +23,14 @@ class PdfView(QtWidgets.QGraphicsView):
 
     sig_page_changed = Signal()
 
-    def __init__(self, fitzdoc, current_page=0, parent=None):
+    def __init__(self, parent=None):
         super(PdfView, self).__init__(parent)
+
+        self._page_navigator = PageNavigator(parent)
         
-        self._current_page = current_page
+        self._current_page: int = 0
+        self.page_count: int = 0
+        self.dlist: list[fitz.DisplayList] = [None]
 
         self.zoom_factor = 1
         self.max_zoom_factor = 3
@@ -35,10 +39,6 @@ class PdfView(QtWidgets.QGraphicsView):
         self.max_size = [1920,1080]
         self.prevPoint = QtCore.QPoint()
         self.addOffset = 5
-
-        self.fitzdoc: fitz.Document = fitzdoc
-        self.page_count = len(self.fitzdoc)
-        self.dlist: list[fitz.DisplayList] = [None] * self.page_count
 
         self.doc_scene = QtWidgets.QGraphicsScene(self)
         self.setScene(self.doc_scene)
@@ -50,8 +50,6 @@ class PdfView(QtWidgets.QGraphicsView):
         self.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         self.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing)
 
-        self.render_page(0)
-       
         self.doc_scene.setSceneRect(self.page_pixmap_item.boundingRect()) 
         self.doc_scene.addRect(self.page_pixmap_item.boundingRect(), QtCore.Qt.GlobalColor.red)
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter | QtCore.Qt.AlignmentFlag.AlignHCenter)
@@ -62,7 +60,16 @@ class PdfView(QtWidgets.QGraphicsView):
         # self.doc_scene.addRect(r, Qt.GlobalColor.red)
         # self.fitInView(self.page_pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
         return super().showEvent(event)
+    
+    def setDocument(self, doc: fitz.Document):
+        self.fitzdoc: fitz.Document = doc
+        self._page_navigator.setDocument(self.fitzdoc)
+        self.page_count = len(self.fitzdoc)
+        self.dlist: list[fitz.DisplayList] = [None] * self.page_count
+        self.render_page(0)
 
+    def pageNavigator(self):
+        return self._page_navigator
 
     @property
     def current_page(self):
@@ -165,21 +172,26 @@ class PdfView(QtWidgets.QGraphicsView):
 
 
 class PdfViewer(QtWidgets.QWidget):
-    def __init__(self, doc, parent=None):
+    def __init__(self, parent=None):
         super(PdfViewer, self).__init__(parent)
-        self.document = doc
-        self.fitzdoc: fitz.Document = fitz.Document(doc)
-        self.outline_model = OutlineModel(self.getToc())
-        self.link_model = LinkModel(self.getLinks())
-        self.initUI()
         
+        self.initUI()
+
+    def loadDocument(self, doc: QtCore.QFile):
+        self.pdfdocument = doc
+        self.fitzdoc: fitz.Document = fitz.Document(self.pdfdocument.fileName())
+        self.doc_view.setDocument(self.fitzdoc)
+        self.outline_model.setDocument(self.fitzdoc)
+        self.link_model.setDocument(self.fitzdoc)
 
     def initUI(self):
         vbox = QtWidgets.QVBoxLayout()
 
         self._toolbar = ToolBar(self, icon_size=(24, 24))
 
-        self.doc_view = PdfView(self.fitzdoc)
+        self.doc_view = PdfView(self)
+        self.outline_model = OutlineModel()
+        self.link_model = LinkModel()
 
         # Toolbar button        
         self.search_in_doc = QtWidgets.QLineEdit()
@@ -192,9 +204,8 @@ class PdfViewer(QtWidgets.QWidget):
         self.mark_pen_btn.setIcon(QtGui.QIcon(':mark_pen'))
         # self.mark_pen_btn.clicked.connect(self.zoom)
 
-        self.page_navigator = PageNavigator(self._toolbar)
-        self.page_navigator.setDocument(self.fitzdoc)
-
+        self.page_navigator = self.doc_view.pageNavigator()
+        
         self.zoom_selector = ZoomSelector(self._toolbar)
 
         self._toolbar.addWidget(self.page_navigator)
@@ -212,13 +223,7 @@ class PdfViewer(QtWidgets.QWidget):
 
         self.outline_tab = QtWidgets.QTreeView(self.left_pane)
         self.outline_tab.setModel(self.outline_model)
-        for column in range(self.outline_model.columnCount()):
-            self.outline_tab.resizeColumnToContents(column)
-        
         self.outline_tab.setHeaderHidden(True)
-        self.outline_tab.hideColumn(1)
-        self.outline_tab.hideColumn(2)
-        self.outline_tab.hideColumn(3)
         self.outline_tab.selectionModel().selectionChanged.connect(self.onOutlineSelected)
         self.left_pane.addTab(self.outline_tab, "Outline")
 
@@ -235,23 +240,18 @@ class PdfViewer(QtWidgets.QWidget):
         vbox.addWidget(self._toolbar)
         vbox.addWidget(splitter)
         self.setLayout(vbox)
-
-        self.getToc()
-        self.getLinks()
         
         self.page_navigator.currentPageChanged.connect(self.doc_view.render_page)
         self.page_navigator.currentLocationChanged.connect(self.doc_view.scrollTo)
 
-        self.installEventFilter(self)
+        self.installEventFilter(self.doc_view)
+
+    def toolbar(self):
+        return self._toolbar
 
     def eventFilter(self, object: QtCore.QObject, event: QtCore.QEvent):
         if object == self and event.type() == QtCore.QEvent.Type.Wheel:
-            modifiers = QtWidgets.QApplication.keyboardModifiers()
-            if modifiers == QtCore.Qt.KeyboardModifier.ControlModifier:
-                # Special tab handling
-                return True
-            else:
-                return False
+            return True
 
         return False
 
@@ -304,22 +304,6 @@ class PdfViewer(QtWidgets.QWidget):
             if isinstance(link, (GoToLink, NamedLink)):
                 self.page_navigator.jump(link.page_to)
 
-    def getToc(self):
-        toc = self.fitzdoc.get_toc(simple=False)
-        return toc
-
-    def getLinks(self) -> list:
-        links = []
-
-        link_factory = LinkFactory()
-
-        for page in self.fitzdoc:
-            for link in page.links():
-                link_item = link_factory.createLink(link, page)
-                links.append(link_item)
-
-        return links
-
     def showEvent(self, event):
         self.doc_view.scrollTo(self.doc_view.verticalScrollBar().minimum())
         super().showEvent(event)    
@@ -328,10 +312,13 @@ def main():
 
     app = QtWidgets.QApplication(sys.argv)
 
+    doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\PSMF_BBL_PV_04-Sep-2024.pdf")
     # doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Sample PDF.pdf")
     # doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Master File.pdf")
-    doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\PSMF_BBL_PV_04-Sep-2024.pdf")
-    doc.showMaximized()
+    # doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\PSMF_BBL_PV_04-Sep-2024.pdf")
+    pdf_viewer = PdfViewer()
+    pdf_viewer.loadDocument(doc)
+    pdf_viewer.showMaximized()
     sys.exit(app.exec())
 
 

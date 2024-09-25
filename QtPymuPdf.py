@@ -64,13 +64,14 @@ class PageNavigator(QtWidgets.QWidget):
     currentPageChanged = Signal(int)
     currentLocationChanged = Signal(QtCore.QPointF)
 
-    def __init__(self, parent: QtWidgets.QToolBar = None):
+    def __init__(self, parent: QtWidgets = None):
         super().__init__()
         self._current_page: int = 0
         self._current_page_label: str = ""
         self._current_location: QtCore.QPointF = QtCore.QPointF()
 
         if parent is not None:
+            parent = parent.toolbar()
             icon_size = parent.iconSize()
         else:
             icon_size = QtCore.QSize(24, 24)
@@ -189,10 +190,8 @@ class OutlineItem(QtGui.QStandardItem):
 
 
 class OutlineModel(QtGui.QStandardItemModel):
-    def __init__(self, outline: list[list], parent=None):
-        super().__init__(parent)
-
-        self.setupModelData(outline)
+    def __init__(self, parent=None):
+        super().__init__(parent)  
 
     def setupModelData(self, outline: list[list]):    
         parents: list[OutlineItem] = []
@@ -215,6 +214,14 @@ class OutlineModel(QtGui.QStandardItemModel):
             parent.appendRow(child)
 
             prev_child = child
+
+    def setDocument(self, doc: fitz.Document):
+        self._document = doc
+        self.setupModelData(self.getToc())
+
+    def getToc(self):
+        toc = self._document.get_toc(simple=False)
+        return toc
 
 @dataclass
 class GoToLink:
@@ -300,10 +307,8 @@ class LinkItem(QtGui.QStandardItem):
         return self._link
 
 class LinkModel(QtGui.QStandardItemModel):
-    def __init__(self, links: list[GoToLink | UriLink | NamedLink], parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-
-        self.setupModelData(links)
 
     def setupModelData(self, links: list[GoToLink | UriLink | NamedLink]):    
         parent = self.invisibleRootItem()
@@ -311,3 +316,19 @@ class LinkModel(QtGui.QStandardItemModel):
         for link in links:
             link_item = LinkItem(link)
             parent.appendRow(link_item)
+
+    def setDocument(self, doc: fitz.Document):
+        self._document = doc
+        self.setupModelData(self.getLinks())
+
+    def getLinks(self) -> list:
+        links = []
+
+        link_factory = LinkFactory()
+
+        for page in self._document:
+            for link in page.links():
+                link_item = link_factory.createLink(link, page)
+                links.append(link_item)
+
+        return links
