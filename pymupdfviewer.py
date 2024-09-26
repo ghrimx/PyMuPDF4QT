@@ -114,9 +114,6 @@ class PdfView(QtWidgets.QGraphicsView):
     def add_pixmap(self, pixmap):
         item = self.create_pixmap_item(pixmap)
         self.doc_scene.addItem(item)
-
-    def create_page_displaylist(self, fitzpage: pymupdf.Page):
-        return fitzpage.get_displaylist()
     
     def create_fitzpix(self, page_dlist: pymupdf.DisplayList, max_size, zoom_factor) -> pymupdf.Pixmap:
         r = page_dlist.rect
@@ -135,7 +132,8 @@ class PdfView(QtWidgets.QGraphicsView):
     def render_page(self, pno=0):
         page_dlist: pymupdf.DisplayList = self.dlist[pno] 
         if not page_dlist :  # create if not yet there
-            self.dlist[pno] = self.create_page_displaylist(self.fitzdoc[pno])
+            fitzpage = self.fitzdoc[pno]
+            self.dlist[pno] = fitzpage.get_displaylist()
             page_dlist = self.dlist[pno]
         
         fitzpix = self.create_fitzpix(page_dlist, self.max_size, self.zoom_factor)
