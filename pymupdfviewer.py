@@ -21,14 +21,11 @@ logger = logging.getLogger(__name__)
 
 class PdfView(QtWidgets.QGraphicsView):
 
-    sig_page_changed = Signal()
-
     def __init__(self, parent=None):
         super(PdfView, self).__init__(parent)
 
         self._page_navigator = PageNavigator(parent)
-        
-        self._current_page: int = 0
+
         self.page_count: int = 0
         self.page_dlist: pymupdf.DisplayList = None
         self.dlist: list[pymupdf.DisplayList] = [None]
@@ -89,21 +86,6 @@ class PdfView(QtWidgets.QGraphicsView):
             self.zoom_factor = (view_height - content_margins.bottom() - content_margins.top() -20) / page_height
             self.render_page(self.pageNavigator().currentPage())
 
-    @Slot(float)
-    def setZoomFactor(self, factor: float):
-        ...
-
-    @property
-    def current_page(self):
-        return self._current_page
-    
-    @current_page.setter
-    def current_page(self, pno):
-        if 0 <= pno < self.page_count and pno != self.current_page:
-            self._current_page = pno
-            self.render_page(pno)
-            self.sig_page_changed.emit()
-
     def convert_to_QPixmap(self, fitzpix:pymupdf.Pixmap) -> QtGui.QPixmap:
         fitzpix_bytes = fitzpix.tobytes()
         pixmap = QtGui.QPixmap()
@@ -158,10 +140,10 @@ class PdfView(QtWidgets.QGraphicsView):
         self.render_page(pno)
 
     def next(self):
-        self.current_page += 1
+        self.pageNavigator().jump(self.pageNavigator().currentPage() + 1)
 
     def previous(self):
-        self.current_page -= 1
+        self.pageNavigator().jump(self.pageNavigator().currentPage() - 1)
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
         if event.key() == QtCore.Qt.Key.Key_Left:
