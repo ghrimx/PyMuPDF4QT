@@ -37,7 +37,7 @@ class PdfView(QtWidgets.QGraphicsView):
         self.max_zoom_factor = 3
         self.min_zoom_factor = 0.5
         self.zoom_factor_step = 0.25
-        self.max_size = [1920,1080]
+ 
         self.prevPoint = QtCore.QPoint()
         self.addOffset = 5
 
@@ -74,7 +74,6 @@ class PdfView(QtWidgets.QGraphicsView):
     
     @Slot(ZoomSelector.ZoomMode)
     def setZoomMode(self, mode: ZoomSelector.ZoomMode):
-        # self.fitInView(self.sceneRect(), QtCore.Qt.AspectRatioMode.KeepAspectRatio)
         view_width = self.width()
         view_height = self.height()
 
@@ -83,9 +82,6 @@ class PdfView(QtWidgets.QGraphicsView):
         page_width = self.page_dlist.rect.width
         page_height = self.page_dlist.rect.height
         
-        print(f"mode: {mode}")
-        print(f"view_width - content_margins.left() - content_margins.right(): {view_width - content_margins.left() - content_margins.right()}")
-
         if mode == ZoomSelector.ZoomMode.FitToWidth:
             self.zoom_factor = (view_width - content_margins.left() - content_margins.right() - 20) / page_width
             self.render_page(self.pageNavigator().currentPage())
@@ -130,42 +126,8 @@ class PdfView(QtWidgets.QGraphicsView):
         item = self.create_pixmap_item(pixmap)
         self.doc_scene.addItem(item)
     
-    def create_fitzpix(self, page_dlist: pymupdf.DisplayList, max_size, zoom_factor=1) -> pymupdf.Pixmap:
-        r = page_dlist.rect
-
-        view_width = self.width()
-        view_height = self.height()
-
-        page_width = self.page_dlist.rect.width
-        page_height = self.page_dlist.rect.height
-
-        h_ratio = view_height / page_height
-        w_ratio =  view_width / page_width
-
-        print("create_fitzpix >>>>")
-        print(f"view_width: {view_width}, view_height: {view_height}")
-        print(f"page_width: {page_width}, page_height: {page_height}")
-        print(f"h_ratio: {h_ratio}, w_ratio: {w_ratio}")
-        print("")
-        print(f"self.viewport().width(): {self.viewport().width()}")
-        print(f"self.width(): {self.width()}")
-        print(f"self.scene().width(): {self.scene().width()}")
-        print(f"self.contentsRect().width(): {self.contentsRect().width()}")
-        print(f"self.frameGeometry().width(): {self.frameGeometry().width()}")
-        print(f"self.parent().sizes()[1]: {self.parent().sizes()[1]}")
-        print(f"self.page_pixmap_item.boundingRect().width(): {self.page_pixmap_item.boundingRect().width()}")
-        print(f"self.page_pixmap_item.pixmap().size().width(): {self.page_pixmap_item.pixmap().size().width()}")
-
-        zoom_0 = 1
-
-        # zoom_0 = h_ratio
-
-        # zoom_0 = min(1, view_width / r.width, view_height / r.height)
-        # if zoom_0 == 1:
-        #     zoom_0 = min(view_width / r.width, view_height / r.height)
-
-        mat_0 = pymupdf.Matrix(zoom_0, zoom_0)
-        mat = mat_0 * pymupdf.Matrix(zoom_factor, zoom_factor)  # zoom matrix
+    def create_fitzpix(self, page_dlist: pymupdf.DisplayList, zoom_factor=1) -> pymupdf.Pixmap:
+        mat = pymupdf.Matrix(zoom_factor, zoom_factor)  # zoom matrix
         fitzpix: pymupdf.Pixmap = page_dlist.get_pixmap(alpha=False, matrix=mat)
         return fitzpix
     
@@ -176,7 +138,7 @@ class PdfView(QtWidgets.QGraphicsView):
             self.dlist[pno] = fitzpage.get_displaylist()
             self.page_dlist = self.dlist[pno]
         
-        fitzpix = self.create_fitzpix(self.page_dlist, self.max_size, self.zoom_factor)
+        fitzpix = self.create_fitzpix(self.page_dlist, self.zoom_factor)
         pixmap = self.convert_to_QPixmap(fitzpix)
         # image = QImage(fitzpix.samples_ptr, fitzpix.width, fitzpix.height, QImage.Format.Format_RGB888)
         # self.page_pixmap_item.setPixmap(QPixmap.fromImage(image))
