@@ -85,8 +85,8 @@ class PdfView(QtWidgets.QGraphicsView):
         if mode == ZoomSelector.ZoomMode.FitToWidth:
             self.zoom_factor = (view_width - content_margins.left() - content_margins.right() - 20) / page_width
             self.render_page(self.pageNavigator().currentPage())
-        elif mode == ZoomSelector.ZoomMode.FitToWidth:
-            self.zoom_factor = view_height / page_height
+        elif mode == ZoomSelector.ZoomMode.FitInView:
+            self.zoom_factor = (view_height - content_margins.bottom() - content_margins.top() -20) / page_height
             self.render_page(self.pageNavigator().currentPage())
 
     @Slot(float)
