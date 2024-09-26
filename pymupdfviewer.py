@@ -149,6 +149,14 @@ class PdfView(QtWidgets.QGraphicsView):
         self.doc_scene.setSceneRect(self.page_pixmap_item.boundingRect()) 
         self.viewport().update()
 
+    def setRotation(self, degree):
+        pno = self.pageNavigator().currentPage()
+        fitzpage = self.fitzdoc[pno]
+        rotation = fitzpage.rotation + degree
+        fitzpage.set_rotation(rotation)
+        self.dlist[pno] = fitzpage.get_displaylist()
+        self.render_page(pno)
+
     def next(self):
         self.current_page += 1
 
@@ -247,13 +255,11 @@ class PdfViewer(QtWidgets.QWidget):
         self.capture_area_btn.setIcon(QtGui.QIcon(':capture_area'))
         self.mark_pen_btn = QtWidgets.QToolButton()
         self.mark_pen_btn.setIcon(QtGui.QIcon(':mark_pen'))
-        self.mark_pen_btn.clicked.connect(self.zoom)
+        # self.mark_pen_btn.clicked.connect(self.zoom)
 
         self.page_navigator = self.doc_view.pageNavigator()
         
         # Zoom
-        self.zoom_selector = ZoomSelector(self._toolbar)
-
         self.btn_fitwidth = QtWidgets.QToolButton(self._toolbar)
         self.btn_fitwidth.setIcon(QtGui.QIcon(':expand-width-fill'))
         self.btn_fitwidth.clicked.connect(self.fitwidth)
@@ -262,10 +268,22 @@ class PdfViewer(QtWidgets.QWidget):
         self.btn_fitheight.setIcon(QtGui.QIcon(':expand-height-line'))
         self.btn_fitheight.clicked.connect(self.fitheight)
 
+        # Rotate
+        self.btn_rotate_anticlockwise = QtWidgets.QToolButton(self)
+        self.btn_rotate_anticlockwise.setIcon(QtGui.QIcon(":anticlockwise"))
+        self.btn_rotate_anticlockwise.setToolTip("Rotate anticlockwise")
+        self.btn_rotate_anticlockwise.clicked.connect(lambda: self.doc_view.setRotation(-90))
+
+        self.btn_rotate_clockwise = QtWidgets.QToolButton(self)
+        self.btn_rotate_clockwise.setIcon(QtGui.QIcon(":clockwise"))
+        self.btn_rotate_clockwise.setToolTip("Rotate clockwise")
+        self.btn_rotate_clockwise.clicked.connect(lambda: self.doc_view.setRotation(90))
+
         self._toolbar.addWidget(self.page_navigator)
-        self._toolbar.addWidget(self.zoom_selector)
         self._toolbar.addWidget(self.btn_fitwidth)
         self._toolbar.addWidget(self.btn_fitheight)
+        self._toolbar.addWidget(self.btn_rotate_anticlockwise)
+        self._toolbar.addWidget(self.btn_rotate_clockwise)
         self._toolbar.add_spacer()
         self._toolbar.addWidget(self.capture_area_btn)
         self._toolbar.addWidget(self.mark_pen_btn)
@@ -301,7 +319,6 @@ class PdfViewer(QtWidgets.QWidget):
         # Signals
         self.page_navigator.currentPageChanged.connect(self.doc_view.render_page)
         self.page_navigator.currentLocationChanged.connect(self.doc_view.scrollTo)
-        self.zoom_selector.zoomModeChanged.connect(self.doc_view.setZoomMode)
 
         self.installEventFilter(self.doc_view)
 
@@ -318,17 +335,13 @@ class PdfViewer(QtWidgets.QWidget):
 
         return False
     
-    # TEST
-    def zoom(self):
-        self.doc_view.page_pixmap_item.setScale(1.5)
-    
     @Slot()
     def fitwidth(self):
-        self.zoom_selector.setCurrentText("Fit Width")
+        self.doc_view.setZoomMode(ZoomSelector.ZoomMode.FitToWidth)
 
     @Slot()
     def fitheight(self):
-        self.zoom_selector.setCurrentText("Fit Page")
+        self.doc_view.setZoomMode(ZoomSelector.ZoomMode.FitInView)
     
     @Slot(QtCore.QItemSelection, QtCore.QItemSelection)
     def onOutlineSelected(self, selected: QtCore.QItemSelection, deseleted: QtCore.QItemSelection):
