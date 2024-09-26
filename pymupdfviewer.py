@@ -1,4 +1,4 @@
-import fitz
+import pymupdf
 import sys
 import pathlib
 import logging
@@ -30,7 +30,7 @@ class PdfView(QtWidgets.QGraphicsView):
         
         self._current_page: int = 0
         self.page_count: int = 0
-        self.dlist: list[fitz.DisplayList] = [None]
+        self.dlist: list[pymupdf.DisplayList] = [None]
 
         self.zoom_factor = 1
         self.max_zoom_factor = 3
@@ -61,15 +61,26 @@ class PdfView(QtWidgets.QGraphicsView):
         # self.fitInView(self.page_pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
         return super().showEvent(event)
     
-    def setDocument(self, doc: fitz.Document):
-        self.fitzdoc: fitz.Document = doc
+    def setDocument(self, doc: pymupdf.Document):
+        self.fitzdoc: pymupdf.Document = doc
         self._page_navigator.setDocument(self.fitzdoc)
         self.page_count = len(self.fitzdoc)
-        self.dlist: list[fitz.DisplayList] = [None] * self.page_count
+        self.dlist: list[pymupdf.DisplayList] = [None] * self.page_count
         self.render_page(0)
 
     def pageNavigator(self):
         return self._page_navigator
+    
+    @Slot(ZoomSelector.ZoomMode)
+    def setZoomMode(self, mode: ZoomSelector.ZoomMode):
+        view_width = self.width()
+        view_height = self.height()
+
+        page_width = self.
+
+    @Slot(float)
+    def setZoomFactor(self, factor: float):
+        ...
 
     @property
     def current_page(self):
@@ -82,7 +93,7 @@ class PdfView(QtWidgets.QGraphicsView):
             self.render_page(pno)
             self.sig_page_changed.emit()
 
-    def convert_to_QPixmap(self, fitzpix:fitz.Pixmap) -> QtGui.QPixmap:
+    def convert_to_QPixmap(self, fitzpix:pymupdf.Pixmap) -> QtGui.QPixmap:
         fitzpix_bytes = fitzpix.tobytes()
         pixmap = QtGui.QPixmap()
         r = pixmap.loadFromData(fitzpix_bytes)
@@ -104,10 +115,10 @@ class PdfView(QtWidgets.QGraphicsView):
         item = self.create_pixmap_item(pixmap)
         self.doc_scene.addItem(item)
 
-    def create_page_displaylist(self, fitzpage: fitz.Page):
+    def create_page_displaylist(self, fitzpage: pymupdf.Page):
         return fitzpage.get_displaylist()
     
-    def create_fitzpix(self, page_dlist: fitz.DisplayList, max_size, zoom_factor) -> fitz.Pixmap:
+    def create_fitzpix(self, page_dlist: pymupdf.DisplayList, max_size, zoom_factor) -> pymupdf.Pixmap:
         r = page_dlist.rect
 
         zoom_0 = 1
@@ -116,13 +127,13 @@ class PdfView(QtWidgets.QGraphicsView):
             if zoom_0 == 1:
                 zoom_0 = min(max_size[0] / r.width, max_size[1] / r.height)
 
-        mat_0 = fitz.Matrix(zoom_0, zoom_0)
-        mat = mat_0 * fitz.Matrix(zoom_factor, zoom_factor)  # zoom matrix
-        fitzpix: fitz.Pixmap = page_dlist.get_pixmap(alpha=False, matrix=mat)
+        mat_0 = pymupdf.Matrix(zoom_0, zoom_0)
+        mat = mat_0 * pymupdf.Matrix(zoom_factor, zoom_factor)  # zoom matrix
+        fitzpix: pymupdf.Pixmap = page_dlist.get_pixmap(alpha=False, matrix=mat)
         return fitzpix  
 
     def render_page(self, pno=0):
-        page_dlist: fitz.DisplayList = self.dlist[pno] 
+        page_dlist: pymupdf.DisplayList = self.dlist[pno] 
         if not page_dlist :  # create if not yet there
             self.dlist[pno] = self.create_page_displaylist(self.fitzdoc[pno])
             page_dlist = self.dlist[pno]
@@ -214,10 +225,10 @@ class PdfViewer(QtWidgets.QWidget):
 
     def loadDocument(self, doc: QtCore.QFile):
         self.pdfdocument = doc
-        self.fitzdoc: fitz.Document = fitz.Document(self.pdfdocument.fileName())
+        self.fitzdoc: pymupdf.Document = pymupdf.Document(self.pdfdocument.fileName())
         self.doc_view.setDocument(self.fitzdoc)
         self.outline_model.setDocument(self.fitzdoc)
-        self.link_model.setDocument(self.fitzdoc)
+        # self.link_model.setDocument(self.fitzdoc)
 
     def initUI(self):
         vbox = QtWidgets.QVBoxLayout()
@@ -237,11 +248,20 @@ class PdfViewer(QtWidgets.QWidget):
         self.capture_area_btn.setIcon(QtGui.QIcon(':capture_area'))
         self.mark_pen_btn = QtWidgets.QToolButton()
         self.mark_pen_btn.setIcon(QtGui.QIcon(':mark_pen'))
-        # self.mark_pen_btn.clicked.connect(self.zoom)
+        self.mark_pen_btn.clicked.connect(self.zoom)
 
         self.page_navigator = self.doc_view.pageNavigator()
         
+        # Zoom
         self.zoom_selector = ZoomSelector(self._toolbar)
+
+        self.btn_fitwidth = QtWidgets.QToolButton(self._toolbar)
+        self.btn_fitwidth.setIcon(QtGui.QIcon(':expand-width-fill'))
+        self.btn_fitwidth.clicked.connect(self.fitwidth)
+
+        self.btn_fitheight = QtWidgets.QToolButton(self._toolbar)
+        self.btn_fitheight.setIcon(QtGui.QIcon(':expand-height-line'))
+        self.btn_fitheight.clicked.connect(self.fitheight)
 
         self._toolbar.addWidget(self.page_navigator)
         self._toolbar.addWidget(self.zoom_selector)
@@ -258,6 +278,7 @@ class PdfViewer(QtWidgets.QWidget):
 
         self.outline_tab = QtWidgets.QTreeView(self.left_pane)
         self.outline_tab.setModel(self.outline_model)
+        self.outline_tab.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
         self.outline_tab.setHeaderHidden(True)
         self.outline_tab.selectionModel().selectionChanged.connect(self.onOutlineSelected)
         self.left_pane.addTab(self.outline_tab, "Outline")
@@ -289,14 +310,25 @@ class PdfViewer(QtWidgets.QWidget):
             return True
 
         return False
+    
+    # TEST
+    def zoom(self):
+        self.doc_view.page_pixmap_item.setScale(1.5)
+    
+    @Slot()
+    def fitwidth(self):
+        self.zoom_selector.setCurrentText("Fit Width")
 
+    @Slot()
+    def fitheight(self):
+        self.zoom_selector.setCurrentText("Fit Page")
     
     @Slot(QtCore.QItemSelection, QtCore.QItemSelection)
     def onOutlineSelected(self, selected: QtCore.QItemSelection, deseleted: QtCore.QItemSelection):
         for idx in selected.indexes():
             item: OutlineItem = self.outline_tab.model().itemFromIndex(idx)
             if item.details is not None:
-                self.page_navigator.jump(item.details.page)
+                self.page_navigator.jump(item.page)
 
     @Slot(QtCore.QItemSelection, QtCore.QItemSelection)
     def onLinkSelected(self, selected: QtCore.QItemSelection, deseleted: QtCore.QItemSelection):
@@ -314,10 +346,11 @@ def main():
 
     app = QtWidgets.QApplication(sys.argv)
 
-    doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\PSMF_BBL_PV_04-Sep-2024.pdf")
-    # doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Sample PDF.pdf")
-    # doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Master File.pdf")
-    # doc = PdfViewer(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\PSMF_BBL_PV_04-Sep-2024.pdf")
+    # doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\PSMF_BBL_PV_04-Sep-2024.pdf")
+    # doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\IPCC_AR6_WGI_FullReport_small.pdf")
+    # doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Sample PDF.pdf")
+    doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Master File.pdf")
+
     pdf_viewer = PdfViewer()
     pdf_viewer.loadDocument(doc)
     pdf_viewer.showMaximized()

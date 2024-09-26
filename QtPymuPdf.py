@@ -1,4 +1,4 @@
-import fitz
+import pymupdf
 from PyQt6 import QtCore
 from PyQt6 import QtGui
 from PyQt6 import QtWidgets
@@ -102,8 +102,8 @@ class PageNavigator(QtWidgets.QWidget):
         hbox.addWidget(self.currentpage_lineedit)
         hbox.addWidget(self.pagecount_label)
 
-    def setDocument(self, document: fitz.Document):
-        self._document: fitz.Document = document
+    def setDocument(self, document: pymupdf.Document):
+        self._document: pymupdf.Document = document
         self.pagecount_label.setText(f"of {self._document.page_count}")
 
     def updatePageLineEdit(self):
@@ -128,7 +128,7 @@ class PageNavigator(QtWidgets.QWidget):
                 self.currentPageChanged.emit(self._current_page)
 
     def currentPageLabel(self) -> str:
-        page: fitz.Page = self._document[self.currentPage()]
+        page: pymupdf.Page = self._document[self.currentPage()]
         return page.get_label()
 
     def currentPage(self) -> int:
@@ -155,43 +155,28 @@ class Kind(Enum):
     LINK_NAMED = 4
     LINK_GOTOR = 5
 
-@dataclass
-class OutlineDetails:
-    kind: int = Kind.LINK_NONE.value
-    file: str = ""
-    page: int = 0
-    to: fitz.Point = None
-    zoom: float = 0.0
-    xref: int = 0
-    color: tuple = ()
-    bold: bool = False
-    italic: bool = False
-    collapse: bool = True
-    nameddest: str = ""
-
 class OutlineItem(QtGui.QStandardItem):
     def __init__(self, data: list):
         super().__init__()
-        self.item_data = data
         self.lvl: int = data[0]
         self.title: str = data[1]
-        self.page: int = data[2]
-        self.details = None
+        self.page: int = int(data[2]) - 1
 
         try:
-            self.setupDetails(data[3])
-        except:
+            self.details: dict = data[3]
+        except IndexError as e:
+            # data[2] is 1-based source page number
             pass
 
         self.setData(self.title, role=QtCore.Qt.ItemDataRole.DisplayRole)
-    
-    def setupDetails(self, details: dict):
-        self.details = OutlineDetails(**details)
+
+    def getDetails(self):
+        return self.details
 
 
 class OutlineModel(QtGui.QStandardItemModel):
     def __init__(self, parent=None):
-        super().__init__(parent)  
+        super().__init__(parent)
 
     def setupModelData(self, outline: list[list]):    
         parents: list[OutlineItem] = []
@@ -215,7 +200,7 @@ class OutlineModel(QtGui.QStandardItemModel):
 
             prev_child = child
 
-    def setDocument(self, doc: fitz.Document):
+    def setDocument(self, doc: pymupdf.Document):
         self._document = doc
         self.setupModelData(self.getToc())
 
@@ -227,16 +212,16 @@ class OutlineModel(QtGui.QStandardItemModel):
 class GoToLink:
     kind: Kind = Kind.LINK_GOTO
     xref: int = 0
-    hotspot: fitz.Rect = None
+    hotspot: pymupdf.Rect = None
     page_to: int = 0
-    to: fitz.Point = None
+    to: pymupdf.Point = None
     zoom: float = 1.0
     id: str = ""
-    page: InitVar[fitz.Page | None] = None
+    page: InitVar[pymupdf.Page | None] = None
     page_from: int = 0
     label: str = ""
 
-    def __post_init__(self, page: fitz.Page):
+    def __post_init__(self, page: pymupdf.Page):
         self.page_from = page.number
         height_correction = self.hotspot.height * 0.1
         rect = self.hotspot + [0, height_correction, 0, -height_correction]
@@ -247,14 +232,14 @@ class GoToLink:
 class UriLink:
     kind: Kind = Kind.LINK_URI
     xref: int = 0
-    hotspot: fitz.Rect = None
+    hotspot: pymupdf.Rect = None
     uri: str = ""
     id: str = ""
-    page: InitVar[fitz.Page | None] = None
+    page: InitVar[pymupdf.Page | None] = None
     page_from: int = 0
     label: str = ""
 
-    def __post_init__(self, page: fitz.Page):
+    def __post_init__(self, page: pymupdf.Page):
         self.page_from = page.number
         height_correction = self.hotspot.height * 0.1
         rect = self.hotspot + [0, height_correction, 0, -height_correction]
@@ -265,17 +250,17 @@ class UriLink:
 class NamedLink:
     kind: Kind = Kind.LINK_NAMED
     xref: int = 0
-    hotspot: fitz.Rect = None
+    hotspot: pymupdf.Rect = None
     page_to: int = 0
-    to: fitz.Point = None
+    to: pymupdf.Point = None
     zoom: float = 1.0
     nameddest: str = ""
     id: str = ""
-    page: InitVar[fitz.Page | None] = None
+    page: InitVar[pymupdf.Page | None] = None
     page_from: int = 0
     label: str = ""
 
-    def __post_init__(self, page: fitz.Page):
+    def __post_init__(self, page: pymupdf.Page):
         self.page_from = page.number
         height_correction = - self.hotspot.height * 0.1
         rect = self.hotspot + [0, height_correction, 0, -height_correction]
@@ -290,7 +275,7 @@ class LinkFactory:
         for link_type in [GoToLink, UriLink, NamedLink]:
             self.link_types[link_type.kind] = link_type
 
-    def createLink(self, link: dict, page: fitz.Page):
+    def createLink(self, link: dict, page: pymupdf.Page):
         val: GoToLink | UriLink | NamedLink
         for key, val in self.link_types.items():
             if link['kind'] == key.value:
@@ -317,7 +302,7 @@ class LinkModel(QtGui.QStandardItemModel):
             link_item = LinkItem(link)
             parent.appendRow(link_item)
 
-    def setDocument(self, doc: fitz.Document):
+    def setDocument(self, doc: pymupdf.Document):
         self._document = doc
         self.setupModelData(self.getLinks())
 
@@ -327,7 +312,7 @@ class LinkModel(QtGui.QStandardItemModel):
         link_factory = LinkFactory()
 
         for page in self._document:
-            for link in page.links():
+            for link in page.links([pymupdf.LINK_GOTO, pymupdf.LINK_NAMED]):
                 link_item = link_factory.createLink(link, page)
                 links.append(link_item)
 
