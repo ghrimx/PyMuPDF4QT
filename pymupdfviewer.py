@@ -76,7 +76,7 @@ class PdfView(QtWidgets.QGraphicsView):
         view_width = self.width()
         view_height = self.height()
 
-        page_width = self.
+        page_width = None
 
     @Slot(float)
     def setZoomFactor(self, factor: float):
@@ -174,7 +174,7 @@ class PdfView(QtWidgets.QGraphicsView):
                 self.zoom_factor -= self.zoom_factor_step
             while self.zoom_factor < self.min_zoom_factor:
                 self.zoom_factor += self.zoom_factor_step
-            self.render_page(self.current_page)
+            self.render_page(self.pageNavigator().currentPage())
             self.setTransformationAnchor(anchor)
             # self.doc_view.centerOn(self.doc_view.mapFromGlobal(pointer_position))
         else:
