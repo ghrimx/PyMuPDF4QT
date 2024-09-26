@@ -66,7 +66,7 @@ class PageNavigator(QtWidgets.QWidget):
 
     def __init__(self, parent: QtWidgets = None):
         super().__init__()
-        self._current_page: int = 0
+        self._current_page: int = None
         self._current_page_label: str = ""
         self._current_location: QtCore.QPointF = QtCore.QPointF()
 

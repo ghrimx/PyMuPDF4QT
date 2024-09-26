@@ -30,6 +30,7 @@ class PdfView(QtWidgets.QGraphicsView):
         
         self._current_page: int = 0
         self.page_count: int = 0
+        self.page_dlist: pymupdf.DisplayList = None
         self.dlist: list[pymupdf.DisplayList] = [None]
 
         self.zoom_factor = 1
@@ -66,17 +67,36 @@ class PdfView(QtWidgets.QGraphicsView):
         self._page_navigator.setDocument(self.fitzdoc)
         self.page_count = len(self.fitzdoc)
         self.dlist: list[pymupdf.DisplayList] = [None] * self.page_count
-        self.render_page(0)
+        self._page_navigator.setCurrentPage(0)
 
     def pageNavigator(self):
         return self._page_navigator
     
     @Slot(ZoomSelector.ZoomMode)
     def setZoomMode(self, mode: ZoomSelector.ZoomMode):
-        view_width = self.width()
-        view_height = self.height()
+        # self.fitInView(self.sceneRect(), QtCore.Qt.AspectRatioMode.KeepAspectRatio)
+        view_width = self.page_pixmap_item.boundingRect().width()
+        view_height = self.page_pixmap_item.boundingRect().height()
 
-        page_width = None
+        page_width = self.page_dlist.rect.width
+        page_height = self.page_dlist.rect.height
+        
+        print("setZoomMode >>>>")
+        print(f"self.viewport().width(): {self.viewport().width()}")
+        print(f"self.width(): {self.width()}")
+        print(f"self.scene().width(): {self.scene().width()}")
+        print(f"self.contentsRect().width(): {self.contentsRect().width()}")
+        print(f"self.frameGeometry().width(): {self.frameGeometry().width()}")
+        print(f"self.parent().sizes()[1]: {self.parent().sizes()[1]}")
+        print(f"self.page_pixmap_item.boundingRect().width(): {self.page_pixmap_item.boundingRect().width()}")
+        print(f"self.page_pixmap_item.pixmap().size().width(): {self.page_pixmap_item.pixmap().size().width()}")
+
+        if mode == ZoomSelector.ZoomMode.FitToWidth:
+            self.zoom_factor = view_width / page_width
+            self.render_page(self.pageNavigator().currentPage())
+        elif mode == ZoomSelector.ZoomMode.FitToWidth:
+            self.zoom_factor = view_height / page_height
+            self.render_page(self.pageNavigator().currentPage())
 
     @Slot(float)
     def setZoomFactor(self, factor: float):
@@ -115,14 +135,25 @@ class PdfView(QtWidgets.QGraphicsView):
         item = self.create_pixmap_item(pixmap)
         self.doc_scene.addItem(item)
     
-    def create_fitzpix(self, page_dlist: pymupdf.DisplayList, max_size, zoom_factor) -> pymupdf.Pixmap:
+    def create_fitzpix(self, page_dlist: pymupdf.DisplayList, max_size, zoom_factor=1) -> pymupdf.Pixmap:
         r = page_dlist.rect
 
+        view_width = self.width()
+        view_height = self.height()
+
+        page_width = self.page_dlist.rect.width
+        page_height = self.page_dlist.rect.height
+
+        h_ratio = view_height / page_height
+        w_ratio =  view_width / page_width
+
         zoom_0 = 1
-        if max_size:
-            zoom_0 = min(1, max_size[0] / r.width, max_size[1] / r.height)
-            if zoom_0 == 1:
-                zoom_0 = min(max_size[0] / r.width, max_size[1] / r.height)
+
+        # zoom_0 = h_ratio
+
+        # zoom_0 = min(1, view_width / r.width, view_height / r.height)
+        # if zoom_0 == 1:
+        #     zoom_0 = min(view_width / r.width, view_height / r.height)
 
         mat_0 = pymupdf.Matrix(zoom_0, zoom_0)
         mat = mat_0 * pymupdf.Matrix(zoom_factor, zoom_factor)  # zoom matrix
@@ -130,13 +161,13 @@ class PdfView(QtWidgets.QGraphicsView):
         return fitzpix  
 
     def render_page(self, pno=0):
-        page_dlist: pymupdf.DisplayList = self.dlist[pno] 
-        if not page_dlist :  # create if not yet there
+        self.page_dlist: pymupdf.DisplayList = self.dlist[pno] 
+        if not self.page_dlist :  # create if not yet there
             fitzpage = self.fitzdoc[pno]
             self.dlist[pno] = fitzpage.get_displaylist()
-            page_dlist = self.dlist[pno]
+            self.page_dlist = self.dlist[pno]
         
-        fitzpix = self.create_fitzpix(page_dlist, self.max_size, self.zoom_factor)
+        fitzpix = self.create_fitzpix(self.page_dlist, self.max_size, self.zoom_factor)
         pixmap = self.convert_to_QPixmap(fitzpix)
         # image = QImage(fitzpix.samples_ptr, fitzpix.width, fitzpix.height, QImage.Format.Format_RGB888)
         # self.page_pixmap_item.setPixmap(QPixmap.fromImage(image))
@@ -163,7 +194,6 @@ class PdfView(QtWidgets.QGraphicsView):
         #Zoom : CTRL + wheel
         modifiers = QtWidgets.QApplication.keyboardModifiers()
         if modifiers == QtCore.Qt.KeyboardModifier.ControlModifier:
-            pointer_position: QtCore.QPointF = event.globalPosition()
             anchor = self.transformationAnchor()
             self.setTransformationAnchor(QtWidgets.QGraphicsView.ViewportAnchor.AnchorUnderMouse)
             if event.angleDelta().y() > 0:
@@ -193,7 +223,6 @@ class PdfView(QtWidgets.QGraphicsView):
             else:
                 self.verticalScrollBar().setValue(self.verticalScrollBar().sliderPosition() - event.angleDelta().y())
 
-
     def position(self):
         point = self.mapFromGlobal(QtGui.QCursor.pos())
         if not self.geometry().contains(point):
@@ -222,11 +251,12 @@ class PdfViewer(QtWidgets.QWidget):
         self.initUI()
 
     def loadDocument(self, doc: QtCore.QFile):
-        self.pdfdocument = doc
-        self.fitzdoc: pymupdf.Document = pymupdf.Document(self.pdfdocument.fileName())
-        self.doc_view.setDocument(self.fitzdoc)
-        self.outline_model.setDocument(self.fitzdoc)
-        # self.link_model.setDocument(self.fitzdoc)
+        if doc is not None:
+            self.pdfdocument = doc
+            self.fitzdoc: pymupdf.Document = pymupdf.Document(self.pdfdocument.fileName())
+            self.doc_view.setDocument(self.fitzdoc)
+            self.outline_model.setDocument(self.fitzdoc)
+            # self.link_model.setDocument(self.fitzdoc)
 
     def initUI(self):
         vbox = QtWidgets.QVBoxLayout()
@@ -263,6 +293,8 @@ class PdfViewer(QtWidgets.QWidget):
 
         self._toolbar.addWidget(self.page_navigator)
         self._toolbar.addWidget(self.zoom_selector)
+        self._toolbar.addWidget(self.btn_fitwidth)
+        self._toolbar.addWidget(self.btn_fitheight)
         self._toolbar.add_spacer()
         self._toolbar.addWidget(self.capture_area_btn)
         self._toolbar.addWidget(self.mark_pen_btn)
@@ -287,16 +319,18 @@ class PdfViewer(QtWidgets.QWidget):
         self.link_tab.selectionModel().selectionChanged.connect(self.onLinkSelected)
         self.left_pane.addTab(self.link_tab, "Links")
 
-        splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
-        splitter.addWidget(self.left_pane)
-        splitter.addWidget(self.doc_view)
+        self.splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        self.splitter.addWidget(self.left_pane)
+        self.splitter.addWidget(self.doc_view)
 
         vbox.addWidget(self._toolbar)
-        vbox.addWidget(splitter)
+        vbox.addWidget(self.splitter)
         self.setLayout(vbox)
         
+        # Signals
         self.page_navigator.currentPageChanged.connect(self.doc_view.render_page)
         self.page_navigator.currentLocationChanged.connect(self.doc_view.scrollTo)
+        self.zoom_selector.zoomModeChanged.connect(self.doc_view.setZoomMode)
 
         self.installEventFilter(self.doc_view)
 
@@ -348,7 +382,7 @@ def main():
     # doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\IPCC_AR6_WGI_FullReport_small.pdf")
     # doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Sample PDF.pdf")
     doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Master File.pdf")
-
+    # doc = None
     pdf_viewer = PdfViewer()
     pdf_viewer.loadDocument(doc)
     pdf_viewer.showMaximized()
