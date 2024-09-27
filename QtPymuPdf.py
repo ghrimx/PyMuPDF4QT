@@ -327,9 +327,14 @@ class SearchItem(QtGui.QStandardItem):
         self.quads = result['quads']
 
         self.setData(f"page {self.page}", role=QtCore.Qt.ItemDataRole.DisplayRole)
+    
+    def results(self):
+        return self.page, self.quads
 
 
 class SearchModel(QtGui.QStandardItemModel):
+    sigTextFound = Signal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -338,11 +343,21 @@ class SearchModel(QtGui.QStandardItemModel):
 
     def searchFor(self, text: str):
         self.clear()
-        root_item = self.invisibleRootItem()
-        for page in self._document:
-            quads: list = page.search_for(text, quads=True)
+        
+        self._found_count = 0
 
-            if len(quads) > 0:
-                page_result = {"page" : page.number, "quads" : quads}
-                search_item = SearchItem(page_result)
-                root_item.appendRow(search_item)
+        if text != "":
+            root_item = self.invisibleRootItem()
+            for page in self._document:
+                quads: list = page.search_for(text, quads=True)
+
+                if len(quads) > 0:
+                    self._found_count = self._found_count + len(quads)
+                    page_result = {"page" : page.number, "quads" : quads}
+                    search_item = SearchItem(page_result)
+                    root_item.appendRow(search_item)
+        
+        self.sigTextFound.emit(f"Hits: {self._found_count}")
+
+    def foundCount(self):
+        return self._found_count

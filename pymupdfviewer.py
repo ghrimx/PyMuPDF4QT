@@ -8,7 +8,7 @@ import random
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 from enum import Enum
-from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, SearchModel, LinkModel, LinkItem, GoToLink, NamedLink
+from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, SearchModel, LinkModel, LinkItem, GoToLink, NamedLink, SearchItem
 
 from resources import qrc_resources
 
@@ -307,10 +307,20 @@ class PdfViewer(QtWidgets.QWidget):
         self.link_tab.selectionModel().selectionChanged.connect(self.onLinkSelected)
         self.left_pane.addTab(self.link_tab, "Links")
 
+        search_tab = QtWidgets.QWidget(self.left_pane)
+        search_tab_layout = QtWidgets.QVBoxLayout()
+        search_tab.setLayout(search_tab_layout)
+
         self.search_results = QtWidgets.QTreeView(self.left_pane)
         self.search_results.setModel(self.search_model)
         self.search_results.setHeaderHidden(True)
-        self.left_pane.addTab(self.search_results, "Search")
+        self.search_results.selectionModel().selectionChanged.connect(self.onSearchResultSelected)
+
+        self.search_count = QtWidgets.QLabel("Hits: ")
+
+        search_tab_layout.addWidget(self.search_count)
+        search_tab_layout.addWidget(self.search_results)
+        self.left_pane.addTab(search_tab, "Search")
 
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.left_pane)
@@ -323,6 +333,7 @@ class PdfViewer(QtWidgets.QWidget):
         # Signals
         self.page_navigator.currentPageChanged.connect(self.doc_view.render_page)
         self.page_navigator.currentLocationChanged.connect(self.doc_view.scrollTo)
+        self.search_model.sigTextFound.connect(self.search_count.setText)
 
         self.installEventFilter(self.doc_view)
 
@@ -364,6 +375,13 @@ class PdfViewer(QtWidgets.QWidget):
             link = item.link()
             if isinstance(link, (GoToLink, NamedLink)):
                 self.page_navigator.jump(link.page_to)
+
+    @Slot(QtCore.QItemSelection, QtCore.QItemSelection)
+    def onSearchResultSelected(self, selected: QtCore.QItemSelection, deseleted: QtCore.QItemSelection):
+        for idx in selected.indexes():
+            item: SearchItem = self.search_results.model().itemFromIndex(idx)
+            page, quads = item.results()
+            self.page_navigator.jump(page)
 
     def showEvent(self, event):
         self.doc_view.scrollTo(self.doc_view.verticalScrollBar().minimum())
