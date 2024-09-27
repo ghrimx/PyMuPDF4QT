@@ -1,4 +1,5 @@
 import pymupdf
+import fitz
 import sys
 import pathlib
 import logging
@@ -116,7 +117,7 @@ class PdfView(QtWidgets.QGraphicsView):
     def render_page(self, pno=0):
         self.page_dlist: pymupdf.DisplayList = self.dlist[pno] 
         if not self.page_dlist :  # create if not yet there
-            fitzpage = self.fitzdoc[pno]
+            fitzpage = self.fitzdoc.load_page(pno)
             self.dlist[pno] = fitzpage.get_displaylist()
             self.page_dlist = self.dlist[pno]
         
@@ -133,7 +134,7 @@ class PdfView(QtWidgets.QGraphicsView):
 
     def setRotation(self, degree):
         pno = self.pageNavigator().currentPage()
-        fitzpage = self.fitzdoc[pno]
+        fitzpage = self.fitzdoc.load_page(pno)
         rotation = fitzpage.rotation + degree
         fitzpage.set_rotation(rotation)
         self.dlist[pno] = fitzpage.get_displaylist()
@@ -204,6 +205,28 @@ class PdfView(QtWidgets.QGraphicsView):
             location = location.toPoint().y()
         self.verticalScrollBar().setValue(location)
 
+    def searchText(self, text: str):
+        pno = self.pageNavigator().currentPage()
+
+        dlist = self.dlist[self.pageNavigator().currentPage()]
+        page = self.fitzdoc.load_page(self.pageNavigator().currentPage())
+        dlist = page.get_displaylist()
+        textpage: pymupdf.TextPage = page.get_textpage()
+        results = textpage.search(text)
+        pix = page.get_pixmap()
+        r: pymupdf.Rect
+        for r in results:
+            pix.invert_irect(r)
+            print(r)
+
+        rl = page.search_for(text, quads=True)
+        for r in rl:
+            page.add_squiggly_annot(r)
+        self.dlist[pno] = page.get_displaylist()
+        self.render_page(pno)
+            
+        
+
 
 class PdfViewer(QtWidgets.QWidget):
     def __init__(self, parent=None):
@@ -229,9 +252,10 @@ class PdfViewer(QtWidgets.QWidget):
         self.link_model = LinkModel()
 
         # Toolbar button        
-        self.search_in_doc = QtWidgets.QLineEdit()
-        self.search_in_doc.setPlaceholderText("Find in document")
-        self.search_in_doc.setFixedWidth(180)
+        self.search_LineEdit = QtWidgets.QLineEdit()
+        self.search_LineEdit.setPlaceholderText("Find in document")
+        self.search_LineEdit.setFixedWidth(180)
+        self.search_LineEdit.editingFinished.connect(lambda: self.doc_view.searchText(self.search_LineEdit.text()))
 
         self.capture_area_btn = QtWidgets.QToolButton()
         self.capture_area_btn.setIcon(QtGui.QIcon(':capture_area'))
@@ -270,7 +294,7 @@ class PdfViewer(QtWidgets.QWidget):
         self._toolbar.addWidget(self.capture_area_btn)
         self._toolbar.addWidget(self.mark_pen_btn)
         self._toolbar.add_spacer()
-        self._toolbar.addWidget(self.search_in_doc)
+        self._toolbar.addWidget(self.search_LineEdit)
         
         # Left Sidebar
         self.left_pane = QtWidgets.QTabWidget(self)
