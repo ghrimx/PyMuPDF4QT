@@ -8,7 +8,7 @@ import random
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 from enum import Enum
-from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, LinkFactory, LinkModel, LinkItem, GoToLink, NamedLink
+from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, SearchModel, LinkModel, LinkItem, GoToLink, NamedLink
 
 from resources import qrc_resources
 
@@ -29,7 +29,6 @@ class PdfView(QtWidgets.QGraphicsView):
 
         self.page_count: int = 0
         self.page_dlist: pymupdf.DisplayList = None
-        self.dlist: list[pymupdf.DisplayList] = [None]
 
         self.zoom_factor = 1
         self.max_zoom_factor = 3
@@ -111,11 +110,12 @@ class PdfView(QtWidgets.QGraphicsView):
     
     def create_fitzpix(self, page_dlist: pymupdf.DisplayList, zoom_factor=1) -> pymupdf.Pixmap:
         mat = pymupdf.Matrix(zoom_factor, zoom_factor)  # zoom matrix
-        fitzpix: pymupdf.Pixmap = page_dlist.get_pixmap(alpha=False, matrix=mat)
+        fitzpix: pymupdf.Pixmap = page_dlist.get_pixmap(alpha=0, matrix=mat)
         return fitzpix
     
     def render_page(self, pno=0):
-        self.page_dlist: pymupdf.DisplayList = self.dlist[pno] 
+        self.page_dlist: pymupdf.DisplayList = self.dlist[pno]
+
         if not self.page_dlist :  # create if not yet there
             fitzpage = self.fitzdoc.load_page(pno)
             self.dlist[pno] = fitzpage.get_displaylist()
@@ -208,24 +208,14 @@ class PdfView(QtWidgets.QGraphicsView):
     def searchText(self, text: str):
         pno = self.pageNavigator().currentPage()
 
-        dlist = self.dlist[self.pageNavigator().currentPage()]
-        page = self.fitzdoc.load_page(self.pageNavigator().currentPage())
-        dlist = page.get_displaylist()
-        textpage: pymupdf.TextPage = page.get_textpage()
-        results = textpage.search(text)
-        pix = page.get_pixmap()
-        r: pymupdf.Rect
-        for r in results:
-            pix.invert_irect(r)
-            print(r)
-
+        page = self.fitzdoc.load_page(pno)
         rl = page.search_for(text, quads=True)
+
         for r in rl:
-            page.add_squiggly_annot(r)
+            page.add_highlight_annot(r)
+
         self.dlist[pno] = page.get_displaylist()
         self.render_page(pno)
-            
-        
 
 
 class PdfViewer(QtWidgets.QWidget):
@@ -240,6 +230,7 @@ class PdfViewer(QtWidgets.QWidget):
             self.fitzdoc: pymupdf.Document = pymupdf.Document(self.pdfdocument.fileName())
             self.doc_view.setDocument(self.fitzdoc)
             self.outline_model.setDocument(self.fitzdoc)
+            self.search_model.setDocument(self.fitzdoc)
             # self.link_model.setDocument(self.fitzdoc)
 
     def initUI(self):
@@ -250,12 +241,14 @@ class PdfViewer(QtWidgets.QWidget):
         self.doc_view = PdfView(self)
         self.outline_model = OutlineModel()
         self.link_model = LinkModel()
+        self.search_model = SearchModel()
 
         # Toolbar button        
         self.search_LineEdit = QtWidgets.QLineEdit()
         self.search_LineEdit.setPlaceholderText("Find in document")
         self.search_LineEdit.setFixedWidth(180)
-        self.search_LineEdit.editingFinished.connect(lambda: self.doc_view.searchText(self.search_LineEdit.text()))
+        # self.search_LineEdit.editingFinished.connect(lambda: self.doc_view.searchText(self.search_LineEdit.text()))
+        self.search_LineEdit.editingFinished.connect(self.searchFor)
 
         self.capture_area_btn = QtWidgets.QToolButton()
         self.capture_area_btn.setIcon(QtGui.QIcon(':capture_area'))
@@ -314,6 +307,11 @@ class PdfViewer(QtWidgets.QWidget):
         self.link_tab.selectionModel().selectionChanged.connect(self.onLinkSelected)
         self.left_pane.addTab(self.link_tab, "Links")
 
+        self.search_results = QtWidgets.QTreeView(self.left_pane)
+        self.search_results.setModel(self.search_model)
+        self.search_results.setHeaderHidden(True)
+        self.left_pane.addTab(self.search_results, "Search")
+
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.left_pane)
         self.splitter.addWidget(self.doc_view)
@@ -340,6 +338,9 @@ class PdfViewer(QtWidgets.QWidget):
             return True
 
         return False
+    
+    def searchFor(self):
+        self.search_model.searchFor(self.search_LineEdit.text())
     
     @Slot()
     def fitwidth(self):

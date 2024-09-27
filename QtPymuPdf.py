@@ -291,6 +291,7 @@ class LinkItem(QtGui.QStandardItem):
     def link(self):
         return self._link
 
+# TODO: avoid looping twice on list
 class LinkModel(QtGui.QStandardItemModel):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -317,3 +318,31 @@ class LinkModel(QtGui.QStandardItemModel):
                 links.append(link_item)
 
         return links
+
+class SearchItem(QtGui.QStandardItem):
+    def __init__(self, result: dict):
+        super().__init__()
+
+        self.page = result['page']
+        self.quads = result['quads']
+
+        self.setData(f"page {self.page}", role=QtCore.Qt.ItemDataRole.DisplayRole)
+
+
+class SearchModel(QtGui.QStandardItemModel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+    def setDocument(self, doc: pymupdf.Document):
+        self._document = doc
+
+    def searchFor(self, text: str):
+        self.clear()
+        root_item = self.invisibleRootItem()
+        for page in self._document:
+            quads: list = page.search_for(text, quads=True)
+
+            if len(quads) > 0:
+                page_result = {"page" : page.number, "quads" : quads}
+                search_item = SearchItem(page_result)
+                root_item.appendRow(search_item)
