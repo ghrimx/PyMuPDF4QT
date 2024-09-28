@@ -14,7 +14,7 @@ class ToolBar(QtWidgets.QToolBar):
 
     def __init__(self, parent,
                  orientation: Qt.Orientation = Qt.Orientation.Horizontal,
-                 style: Qt.ToolButtonStyle = Qt.ToolButtonStyle.ToolButtonTextUnderIcon,
+                 style: Qt.ToolButtonStyle = Qt.ToolButtonStyle.ToolButtonIconOnly,
                  icon_size: tuple[int, int] = (24, 24)) -> None:
         super().__init__(parent)
         self.actions_call = {}
