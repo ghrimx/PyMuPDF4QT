@@ -38,6 +38,8 @@ class PdfView(QtWidgets.QGraphicsView):
         self.prevPoint = QtCore.QPoint()
         self.addOffset = 5
 
+        self.highlight_annotation = {}
+
         self.doc_scene = QtWidgets.QGraphicsScene(self)
         self.setScene(self.doc_scene)
 
@@ -76,8 +78,10 @@ class PdfView(QtWidgets.QGraphicsView):
 
         content_margins = self.contentsMargins()
 
-        page_width = self.page_dlist.rect.width
-        page_height = self.page_dlist.rect.height
+        page_width = self.dlist[self.pageNavigator().currentPage()].rect.width
+        # page_width = self.page_dlist.rect.width
+        page_height = self.dlist[self.pageNavigator().currentPage()].rect.height
+        # page_height = self.page_dlist.rect.height
         
         if mode == ZoomSelector.ZoomMode.FitToWidth:
             self.zoom_factor = (view_width - content_margins.left() - content_margins.right() - 20) / page_width
@@ -113,15 +117,27 @@ class PdfView(QtWidgets.QGraphicsView):
         fitzpix: pymupdf.Pixmap = page_dlist.get_pixmap(alpha=0, matrix=mat)
         return fitzpix
     
+    def setAnnotations(self, annotations: dict):
+        self.highlight_annotation.clear()
+        self.highlight_annotation.update(annotations)
+    
     def render_page(self, pno=0):
-        self.page_dlist: pymupdf.DisplayList = self.dlist[pno]
+        page_dlist: pymupdf.DisplayList = self.dlist[pno]
 
-        if not self.page_dlist :  # create if not yet there
+        if not page_dlist :  # create if not yet there
             fitzpage = self.fitzdoc.load_page(pno)
             self.dlist[pno] = fitzpage.get_displaylist()
-            self.page_dlist = self.dlist[pno]
+            page_dlist = self.dlist[pno]
+
+        annotations = self.highlight_annotation.get(pno)
+        if annotations is not None:
+            page = self.fitzdoc.load_page(pno)
+
+            for quads in annotations:
+                page.add_highlight_annot(quads)
+            page_dlist = page.get_displaylist()
         
-        fitzpix = self.create_fitzpix(self.page_dlist, self.zoom_factor)
+        fitzpix = self.create_fitzpix(page_dlist, self.zoom_factor)
         pixmap = self.convert_to_QPixmap(fitzpix)
         # image = QImage(fitzpix.samples_ptr, fitzpix.width, fitzpix.height, QImage.Format.Format_RGB888)
         # self.page_pixmap_item.setPixmap(QPixmap.fromImage(image))
@@ -329,9 +345,14 @@ class PdfViewer(QtWidgets.QWidget):
         # Signals
         self.page_navigator.currentPageChanged.connect(self.doc_view.render_page)
         self.page_navigator.currentLocationChanged.connect(self.doc_view.scrollTo)
-        self.search_model.sigTextFound.connect(self.search_count.setText)
+        self.search_model.sigTextFound.connect(self.onSearchFound)
 
         self.installEventFilter(self.doc_view)
+
+    @Slot(str)
+    def onSearchFound(self, count: str):
+        self.search_count.setText(count)
+        self.doc_view.setAnnotations(self.search_model.getSearchResults())
 
     def pdfViewSize(self) -> QtCore.QSize:
         idx = self.splitter.indexOf(self.doc_view)
@@ -377,6 +398,7 @@ class PdfViewer(QtWidgets.QWidget):
         for idx in selected.indexes():
             item: SearchItem = self.search_results.model().itemFromIndex(idx)
             page, quads = item.results()
+            # self.doc_view.setAnnotations(self.search_results.model().searchResults())
             self.page_navigator.jump(page)
 
     def showEvent(self, event):

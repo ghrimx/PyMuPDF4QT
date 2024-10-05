@@ -338,11 +338,14 @@ class SearchModel(QtGui.QStandardItemModel):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        self._search_results = {}
+
     def setDocument(self, doc: pymupdf.Document):
         self._document = doc
 
     def searchFor(self, text: str):
         self.clear()
+        self._search_results.clear()
         
         self._found_count = 0
 
@@ -354,6 +357,7 @@ class SearchModel(QtGui.QStandardItemModel):
                 if len(quads) > 0:
                     self._found_count = self._found_count + len(quads)
                     page_result = {"page" : page.number, "quads" : quads}
+                    self._search_results.update({page.number: quads})
                     search_item = SearchItem(page_result)
                     root_item.appendRow(search_item)
         
@@ -361,3 +365,6 @@ class SearchModel(QtGui.QStandardItemModel):
 
     def foundCount(self):
         return self._found_count
+    
+    def getSearchResults(self):
+        return self._search_results
