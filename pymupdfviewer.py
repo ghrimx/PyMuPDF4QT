@@ -38,7 +38,7 @@ class PdfView(QtWidgets.QGraphicsView):
         self.prevPoint = QtCore.QPoint()
         self.addOffset = 5
 
-        self.highlight_annotation = {}
+        self.annotations = {}
 
         self.doc_scene = QtWidgets.QGraphicsScene(self)
         self.setScene(self.doc_scene)
@@ -79,9 +79,7 @@ class PdfView(QtWidgets.QGraphicsView):
         content_margins = self.contentsMargins()
 
         page_width = self.dlist[self.pageNavigator().currentPage()].rect.width
-        # page_width = self.page_dlist.rect.width
         page_height = self.dlist[self.pageNavigator().currentPage()].rect.height
-        # page_height = self.page_dlist.rect.height
         
         if mode == ZoomSelector.ZoomMode.FitToWidth:
             self.zoom_factor = (view_width - content_margins.left() - content_margins.right() - 20) / page_width
@@ -118,8 +116,8 @@ class PdfView(QtWidgets.QGraphicsView):
         return fitzpix
     
     def setAnnotations(self, annotations: dict):
-        self.highlight_annotation.clear()
-        self.highlight_annotation.update(annotations)
+        self.annotations.clear()
+        self.annotations.update(annotations)
     
     def render_page(self, pno=0):
         page_dlist: pymupdf.DisplayList = self.dlist[pno]
@@ -129,14 +127,17 @@ class PdfView(QtWidgets.QGraphicsView):
             self.dlist[pno] = fitzpage.get_displaylist()
             page_dlist = self.dlist[pno]
 
-        annotations = self.highlight_annotation.get(pno)
-        if annotations is not None:
-            page = self.fitzdoc.load_page(pno)
+        # Remove annotations
+        page = self.fitzdoc.load_page(pno)
+        self.fitzdoc.xref_set_key(page.xref, "Annots", "null")
+        
+        add_annotations = self.annotations.get(pno)
+        if add_annotations is not None:
 
-            for quads in annotations:
+            for quads in add_annotations:
                 page.add_highlight_annot(quads)
             page_dlist = page.get_displaylist()
-        
+
         fitzpix = self.create_fitzpix(page_dlist, self.zoom_factor)
         pixmap = self.convert_to_QPixmap(fitzpix)
         # image = QImage(fitzpix.samples_ptr, fitzpix.width, fitzpix.height, QImage.Format.Format_RGB888)
@@ -220,18 +221,6 @@ class PdfView(QtWidgets.QGraphicsView):
         if isinstance(location, QtCore.QPointF):
             location = location.toPoint().y()
         self.verticalScrollBar().setValue(location)
-
-    def searchText(self, text: str):
-        pno = self.pageNavigator().currentPage()
-
-        page = self.fitzdoc.load_page(pno)
-        rl = page.search_for(text, quads=True)
-
-        for r in rl:
-            page.add_highlight_annot(r)
-
-        self.dlist[pno] = page.get_displaylist()
-        self.render_page(pno)
 
 
 class PdfViewer(QtWidgets.QWidget):
@@ -326,6 +315,7 @@ class PdfViewer(QtWidgets.QWidget):
         self.search_results = QtWidgets.QTreeView(self.left_pane)
         self.search_results.setModel(self.search_model)
         self.search_results.setHeaderHidden(True)
+        self.search_results.setRootIsDecorated(False)
         self.search_results.selectionModel().selectionChanged.connect(self.onSearchResultSelected)
 
         self.search_count = QtWidgets.QLabel("Hits: ")
@@ -353,6 +343,8 @@ class PdfViewer(QtWidgets.QWidget):
     def onSearchFound(self, count: str):
         self.search_count.setText(count)
         self.doc_view.setAnnotations(self.search_model.getSearchResults())
+        self.doc_view.render_page(self.page_navigator.currentPage())
+        self.search_results.resizeColumnToContents(0)
 
     def pdfViewSize(self) -> QtCore.QSize:
         idx = self.splitter.indexOf(self.doc_view)
@@ -397,8 +389,7 @@ class PdfViewer(QtWidgets.QWidget):
     def onSearchResultSelected(self, selected: QtCore.QItemSelection, deseleted: QtCore.QItemSelection):
         for idx in selected.indexes():
             item: SearchItem = self.search_results.model().itemFromIndex(idx)
-            page, quads = item.results()
-            # self.doc_view.setAnnotations(self.search_results.model().searchResults())
+            page, quads, page_label = item.results()
             self.page_navigator.jump(page)
 
     def showEvent(self, event):

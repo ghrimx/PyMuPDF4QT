@@ -323,13 +323,14 @@ class SearchItem(QtGui.QStandardItem):
     def __init__(self, result: dict):
         super().__init__()
 
-        self.page = result['page']
+        self.pno = result['pno']
         self.quads = result['quads']
+        self.page_label = result['label']
 
-        self.setData(f"page {self.page}", role=QtCore.Qt.ItemDataRole.DisplayRole)
+        self.setData(f"index: {self.pno}\tlabel: {self.page_label}", role=QtCore.Qt.ItemDataRole.DisplayRole)
     
     def results(self):
-        return self.page, self.quads
+        return self.pno, self.quads, self.page_label
 
 
 class SearchModel(QtGui.QStandardItemModel):
@@ -338,7 +339,7 @@ class SearchModel(QtGui.QStandardItemModel):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self._search_results = {}
+        self._search_results: dict[int, list] = {}
 
     def setDocument(self, doc: pymupdf.Document):
         self._document = doc
@@ -351,12 +352,13 @@ class SearchModel(QtGui.QStandardItemModel):
 
         if text != "":
             root_item = self.invisibleRootItem()
+            page: pymupdf.Page
             for page in self._document:
                 quads: list = page.search_for(text, quads=True)
-
+                
                 if len(quads) > 0:
                     self._found_count = self._found_count + len(quads)
-                    page_result = {"page" : page.number, "quads" : quads}
+                    page_result = {"pno" : page.number, "label": page.get_label(), "quads" : quads}
                     self._search_results.update({page.number: quads})
                     search_item = SearchItem(page_result)
                     root_item.appendRow(search_item)
