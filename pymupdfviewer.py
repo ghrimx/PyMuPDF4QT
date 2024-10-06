@@ -17,7 +17,7 @@ from toolbar import ToolBar
 SUPPORTED_FORMART = ("png", "jpg", "jpeg", "bmp", "tiff", "pnm", "pam", "ps", "svg",
                      "pdf", "epub", "xps", "fb2", "cbz", "txt")
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)   
 
 
 class PdfView(QtWidgets.QGraphicsView):
@@ -228,6 +228,7 @@ class PdfViewer(QtWidgets.QWidget):
         super(PdfViewer, self).__init__(parent)
 
         self.initUI()
+        self.fold = False
 
     def loadDocument(self, doc: QtCore.QFile):
         if doc is not None:
@@ -242,6 +243,7 @@ class PdfViewer(QtWidgets.QWidget):
         vbox = QtWidgets.QVBoxLayout()
 
         self._toolbar = ToolBar(self, icon_size=(24, 24))
+        self._toolbar.setFixedHeight(36)
 
         self.doc_view = PdfView(self)
         self.outline_model = OutlineModel()
@@ -279,6 +281,11 @@ class PdfViewer(QtWidgets.QWidget):
         self.rotate_clockwise.setToolTip("Rotate clockwise")
         self.rotate_clockwise.triggered.connect(lambda: self.doc_view.setRotation(90))
 
+        # Collapse Left pane
+
+        self.fold_left_pane = QtGui.QAction(QtGui.QIcon(':sidebar-fold-line'), "", self, triggered=self.onFoldLeftSidebarTriggered)
+
+        self._toolbar.addAction(self.fold_left_pane)
         self._toolbar.addWidget(self.page_navigator)
         self._toolbar.addAction(self.action_fitwidth)
         self._toolbar.addAction(self.action_fitheight)
@@ -394,7 +401,21 @@ class PdfViewer(QtWidgets.QWidget):
 
     def showEvent(self, event):
         self.doc_view.scrollTo(self.doc_view.verticalScrollBar().minimum())
-        super().showEvent(event)    
+        super().showEvent(event)
+
+    def onFoldLeftSidebarTriggered(self):
+        if self.fold == False:
+            self.fold = True
+        else:
+            self.fold = False
+
+        if self.fold:
+            self.splitter.setSizes([0, 500])
+            self.fold_left_pane.setIcon(QtGui.QIcon(':sidebar-unfold-line'))
+        else:
+            self.splitter.setSizes([100, 500])
+            self.fold_left_pane.setIcon(QtGui.QIcon(':sidebar-fold-line'))
+
 
 def main():
 

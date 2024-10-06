@@ -81,6 +81,7 @@ class PageNavigator(QtWidgets.QWidget):
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Minimum)
         self.setLayout(hbox)
         self.setContentsMargins(0, 0, 0, 0)
+        hbox.setContentsMargins(0, 0, 0, 0)
         
         self.currentpage_lineedit = QtWidgets.QLineEdit()
         self.currentpage_lineedit.setFixedWidth(40)
