@@ -8,7 +8,7 @@ import random
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 from enum import Enum
-from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, SearchModel, LinkModel, LinkItem, GoToLink, NamedLink, SearchItem
+from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, SearchModel, LinkModel, LinkItem, GoToLink, NamedLink, SearchItem, MetaDataWidget
 
 from resources import qrc_resources
 
@@ -237,6 +237,7 @@ class PdfViewer(QtWidgets.QWidget):
             self.outline_model.setDocument(self.fitzdoc)
             self.search_model.setDocument(self.fitzdoc)
             # self.link_model.setDocument(self.fitzdoc)
+            self.metadata_tab.setMetadata(self.fitzdoc.metadata)
 
     def initViewer(self):
         self.fold = False
@@ -303,6 +304,7 @@ class PdfViewer(QtWidgets.QWidget):
         self.left_pane.setTabPosition(QtWidgets.QTabWidget.TabPosition.West)
         self.left_pane.setMovable(False)
 
+        # Outline Tab
         self.outline_tab = QtWidgets.QTreeView(self.left_pane)
         self.outline_tab.setModel(self.outline_model)
         self.outline_tab.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -310,12 +312,14 @@ class PdfViewer(QtWidgets.QWidget):
         self.outline_tab.selectionModel().selectionChanged.connect(self.onOutlineSelected)
         self.left_pane.addTab(self.outline_tab, "Outline")
 
+        # Link tab
         self.link_tab = QtWidgets.QTreeView(self.left_pane)
         self.link_tab.setModel(self.link_model)
         self.link_tab.setHeaderHidden(True)
         self.link_tab.selectionModel().selectionChanged.connect(self.onLinkSelected)
         self.left_pane.addTab(self.link_tab, "Links")
 
+        # Search Tab
         search_tab = QtWidgets.QWidget(self.left_pane)
         search_tab_layout = QtWidgets.QVBoxLayout()
         search_tab.setLayout(search_tab_layout)
@@ -332,9 +336,16 @@ class PdfViewer(QtWidgets.QWidget):
         search_tab_layout.addWidget(self.search_results)
         self.left_pane.addTab(search_tab, "Search")
 
+        # Metadata
+        self.metadata_tab = MetaDataWidget(self.left_pane)
+        self.left_pane.addTab(self.metadata_tab, "Metadata")
+
+        # Splitter
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.left_pane)
         self.splitter.addWidget(self.pdfview)
+        self.splitter_sizes = [100, 700]
+        self.splitter.setSizes(self.splitter_sizes)
 
         vbox.addWidget(self._toolbar)
         vbox.addWidget(self.splitter)
@@ -416,9 +427,9 @@ class PdfViewer(QtWidgets.QWidget):
             self.fold = False
 
         if self.fold:
-            self.splitter.setSizes([0, 500])
+            self.splitter_sizes = self.splitter.sizes()
+            self.splitter.setSizes([0, 800])
             self.fold_left_pane.setIcon(QtGui.QIcon(':sidebar-unfold-line'))
         else:
-            self.splitter.setSizes([100, 500])
             self.fold_left_pane.setIcon(QtGui.QIcon(':sidebar-fold-line'))
-
+            self.splitter.setSizes(self.splitter_sizes)

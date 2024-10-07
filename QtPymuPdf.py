@@ -396,3 +396,20 @@ class SearchModel(QtGui.QStandardItemModel):
     
     def getSearchResults(self):
         return self._search_results
+    
+class MetaDataWidget(QtWidgets.QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self._metadata = None
+        self.metadata_label = QtWidgets.QLabel()
+        self.metadata_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        
+        vbox = QtWidgets.QVBoxLayout()
+        self.setLayout(vbox)
+
+        vbox.addWidget(self.metadata_label)
+    
+    def setMetadata(self, metadata: dict):
+        self._metadata = '\n'.join(f"{key} : {val}" for key, val in metadata.items())
+        self.metadata_label.setText(self._metadata.strip())
