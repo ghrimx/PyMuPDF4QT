@@ -227,25 +227,25 @@ class PdfViewer(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super(PdfViewer, self).__init__(parent)
 
-        self.initUI()
-        self.fold = False
+        self.initViewer()
 
     def loadDocument(self, doc: QtCore.QFile):
         if doc is not None:
             self.pdfdocument = doc
             self.fitzdoc: pymupdf.Document = pymupdf.Document(self.pdfdocument.fileName())
-            self.doc_view.setDocument(self.fitzdoc)
+            self.pdfview.setDocument(self.fitzdoc)
             self.outline_model.setDocument(self.fitzdoc)
             self.search_model.setDocument(self.fitzdoc)
             # self.link_model.setDocument(self.fitzdoc)
 
-    def initUI(self):
+    def initViewer(self):
+        self.fold = False
         vbox = QtWidgets.QVBoxLayout()
 
         self._toolbar = ToolBar(self, icon_size=(24, 24))
         self._toolbar.setFixedHeight(36)
 
-        self.doc_view = PdfView(self)
+        self.pdfview = PdfView(self)
         self.outline_model = OutlineModel()
         self.link_model = LinkModel()
         self.search_model = SearchModel()
@@ -263,7 +263,7 @@ class PdfViewer(QtWidgets.QWidget):
         self.mark_pen = QtGui.QAction(QtGui.QIcon(':mark_pen'), "Mark text", self)
         # self.mark_pen_btn.clicked.connect(self.zoom)
 
-        self.page_navigator = self.doc_view.pageNavigator()
+        self.page_navigator = self.pdfview.pageNavigator()
         
         # Zoom
         self.action_fitwidth = QtGui.QAction(QtGui.QIcon(':expand-width-fill'), "Fit Width", self)
@@ -275,18 +275,19 @@ class PdfViewer(QtWidgets.QWidget):
         # Rotate
         self.rotate_anticlockwise = QtGui.QAction(QtGui.QIcon(":anticlockwise"), "Rotate left", self)
         self.rotate_anticlockwise.setToolTip("Rotate anticlockwise")
-        self.rotate_anticlockwise.triggered.connect(lambda: self.doc_view.setRotation(-90))
+        self.rotate_anticlockwise.triggered.connect(lambda: self.pdfview.setRotation(-90))
 
         self.rotate_clockwise = QtGui.QAction(QtGui.QIcon(":clockwise"), "Rotate right", self)
         self.rotate_clockwise.setToolTip("Rotate clockwise")
-        self.rotate_clockwise.triggered.connect(lambda: self.doc_view.setRotation(90))
+        self.rotate_clockwise.triggered.connect(lambda: self.pdfview.setRotation(90))
 
         # Collapse Left pane
-
         self.fold_left_pane = QtGui.QAction(QtGui.QIcon(':sidebar-fold-line'), "", self, triggered=self.onFoldLeftSidebarTriggered)
 
         self._toolbar.addAction(self.fold_left_pane)
+        self._toolbar.addSeparator()
         self._toolbar.addWidget(self.page_navigator)
+        self._toolbar.addSeparator()
         self._toolbar.addAction(self.action_fitwidth)
         self._toolbar.addAction(self.action_fitheight)
         self._toolbar.addAction(self.rotate_anticlockwise)
@@ -333,32 +334,39 @@ class PdfViewer(QtWidgets.QWidget):
 
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.left_pane)
-        self.splitter.addWidget(self.doc_view)
+        self.splitter.addWidget(self.pdfview)
 
         vbox.addWidget(self._toolbar)
         vbox.addWidget(self.splitter)
         self.setLayout(vbox)
         
         # Signals
-        self.page_navigator.currentPageChanged.connect(self.doc_view.render_page)
-        self.page_navigator.currentLocationChanged.connect(self.doc_view.scrollTo)
+        self.page_navigator.currentPageChanged.connect(self.pdfview.render_page)
+        self.page_navigator.currentLocationChanged.connect(self.pdfview.scrollTo)
         self.search_model.sigTextFound.connect(self.onSearchFound)
 
-        self.installEventFilter(self.doc_view)
+        self.installEventFilter(self.pdfview)
+
+        # Collapse Left Side pane by default
+        self.onFoldLeftSidebarTriggered()
 
     @Slot(str)
     def onSearchFound(self, count: str):
         self.search_count.setText(count)
-        self.doc_view.setAnnotations(self.search_model.getSearchResults())
-        self.doc_view.render_page(self.page_navigator.currentPage())
+        self.pdfview.setAnnotations(self.search_model.getSearchResults())
+        self.pdfview.render_page(self.page_navigator.currentPage())
         self.search_results.resizeColumnToContents(0)
 
     def pdfViewSize(self) -> QtCore.QSize:
-        idx = self.splitter.indexOf(self.doc_view)
+        idx = self.splitter.indexOf(self.pdfview)
         return self.splitter.widget(idx).size()
 
     def toolbar(self):
         return self._toolbar
+
+    def showEvent(self, event):
+        self.pdfview.scrollTo(self.pdfview.verticalScrollBar().minimum())
+        super().showEvent(event)
 
     def eventFilter(self, object: QtCore.QObject, event: QtCore.QEvent):
         if object == self and event.type() == QtCore.QEvent.Type.Wheel:
@@ -366,16 +374,17 @@ class PdfViewer(QtWidgets.QWidget):
 
         return False
     
+    @Slot()
     def searchFor(self):
         self.search_model.searchFor(self.search_LineEdit.text())
     
     @Slot()
     def fitwidth(self):
-        self.doc_view.setZoomMode(ZoomSelector.ZoomMode.FitToWidth)
+        self.pdfview.setZoomMode(ZoomSelector.ZoomMode.FitToWidth)
 
     @Slot()
     def fitheight(self):
-        self.doc_view.setZoomMode(ZoomSelector.ZoomMode.FitInView)
+        self.pdfview.setZoomMode(ZoomSelector.ZoomMode.FitInView)
     
     @Slot(QtCore.QItemSelection, QtCore.QItemSelection)
     def onOutlineSelected(self, selected: QtCore.QItemSelection, deseleted: QtCore.QItemSelection):
@@ -399,12 +408,9 @@ class PdfViewer(QtWidgets.QWidget):
             page, quads, page_label = item.results()
             self.page_navigator.jump(page)
 
-    def showEvent(self, event):
-        self.doc_view.scrollTo(self.doc_view.verticalScrollBar().minimum())
-        super().showEvent(event)
-
+    @Slot()
     def onFoldLeftSidebarTriggered(self):
-        if self.fold == False:
+        if not self.fold:
             self.fold = True
         else:
             self.fold = False
@@ -415,26 +421,4 @@ class PdfViewer(QtWidgets.QWidget):
         else:
             self.splitter.setSizes([100, 500])
             self.fold_left_pane.setIcon(QtGui.QIcon(':sidebar-fold-line'))
-
-
-def main():
-
-    app = QtWidgets.QApplication(sys.argv)
-
-    # doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\PSMF_BBL_PV_04-Sep-2024.pdf")
-    # doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\IPCC_AR6_WGI_FullReport_small.pdf")
-    # doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Sample PDF.pdf")
-    doc = QtCore.QFile(r"C:\Users\debru\Documents\GitHub\PyMuPDF4QT\resources\Master File.pdf")
-    # doc = None
-    pdf_viewer = PdfViewer()
-    pdf_viewer.loadDocument(doc)
-    pdf_viewer.showMaximized()
-    sys.exit(app.exec())
-
-
-if __name__ == '__main__':
-    main()
-
-
-
 

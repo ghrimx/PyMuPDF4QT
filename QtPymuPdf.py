@@ -69,6 +69,7 @@ class PageNavigator(QtWidgets.QWidget):
         self._current_page: int = None
         self._current_page_label: str = ""
         self._current_location: QtCore.QPointF = QtCore.QPointF()
+        self._page_index:  dict[str, int] = {}
 
         if parent is not None:
             parent = parent.toolbar()
@@ -81,12 +82,13 @@ class PageNavigator(QtWidgets.QWidget):
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Minimum)
         self.setLayout(hbox)
         self.setContentsMargins(0, 0, 0, 0)
-        hbox.setContentsMargins(0, 0, 0, 0)
+        hbox.setContentsMargins(5, 0, 5, 0)
         
         self.currentpage_lineedit = QtWidgets.QLineEdit()
         self.currentpage_lineedit.setFixedWidth(40)
+        self.currentpage_lineedit.editingFinished.connect(self.onPageLineEditChanged)
         self.pagecount_label = QtWidgets.QLabel()
-        self.pagecount_label.setFixedWidth(40)
+        # self.pagecount_label.setFixedWidth(40)
 
         self.previous_btn = QtWidgets.QToolButton(parent)
         self.previous_btn.setIcon(QtGui.QIcon(':arrow-up-s-line'))
@@ -105,7 +107,14 @@ class PageNavigator(QtWidgets.QWidget):
 
     def setDocument(self, document: pymupdf.Document):
         self._document: pymupdf.Document = document
-        self.pagecount_label.setText(f"of {self._document.page_count}")
+        self.indexPages()
+
+    def indexPages(self):
+        for page in self._document:
+            self._page_index.update({page.get_label() : page.number})
+    
+    def pageNumberFromLabel(self, label) -> int | None:
+        return self._page_index.get(label)
 
     def updatePageLineEdit(self):
         page_label = self.currentPageLabel()
@@ -114,6 +123,8 @@ class PageNavigator(QtWidgets.QWidget):
             self.currentpage_lineedit.setText(page_label)
         else:
             self.currentpage_lineedit.setText(f"{self.currentPage() + 1}")
+        
+        self.pagecount_label.setText(f"{self.currentPage() + 1} of {self._document.page_count}")
     
     def document(self):
         return self._document
@@ -138,8 +149,22 @@ class PageNavigator(QtWidgets.QWidget):
     def jump(self, page: int, location = QtCore.QPointF()):
         self.setCurrentPage(page)
         self._current_location = location
-        self.currentLocationChanged.emit(location)      
-            
+        self.currentLocationChanged.emit(location)  
+
+    @Slot()
+    def onPageLineEditChanged(self):
+        p = self.currentpage_lineedit.text()  #  page requested by user
+        pno = self.pageNumberFromLabel(p)
+ 
+        if pno is None:
+            try:
+                pno = int(p) - 1
+            except:
+                ...
+        
+        if isinstance(pno, int):
+            self.jump(pno)
+  
     @Slot()
     def next(self):
         self.jump(self.currentPage() + 1, QtCore.QPointF())
