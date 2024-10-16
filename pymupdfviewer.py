@@ -17,7 +17,7 @@ from toolbar import ToolBar
 SUPPORTED_FORMART = ("png", "jpg", "jpeg", "bmp", "tiff", "pnm", "pam", "ps", "svg",
                      "pdf", "epub", "xps", "fb2", "cbz", "txt")
 
-logger = logging.getLogger(__name__)   
+logger = logging.getLogger(__name__)
 
 
 class PdfView(QtWidgets.QGraphicsView):
