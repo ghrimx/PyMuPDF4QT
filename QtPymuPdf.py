@@ -303,6 +303,7 @@ class LinkFactory:
 
     def createLink(self, link: dict, page: pymupdf.Page):
         val: GoToLink | UriLink | NamedLink
+        # val = self.link_types.get(link['kind'])
         for key, val in self.link_types.items():
             if link['kind'] == key.value:
                 return val(*link.values(), page)
@@ -317,33 +318,26 @@ class LinkItem(QtGui.QStandardItem):
     def link(self):
         return self._link
 
-# TODO: avoid looping twice on list
 class LinkModel(QtGui.QStandardItemModel):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-    def setupModelData(self, links: list[GoToLink | UriLink | NamedLink]):    
-        parent = self.invisibleRootItem()
-
-        for link in links:
-            link_item = LinkItem(link)
-            parent.appendRow(link_item)
-
     def setDocument(self, doc: pymupdf.Document):
         self._document = doc
-        self.setupModelData(self.getLinks())
+        self.setupModelData()
 
-    def getLinks(self) -> list:
-        links = []
+    def setupModelData(self):    
+        parent = self.invisibleRootItem()
 
         link_factory = LinkFactory()
 
         for page in self._document:
             for link in page.links([pymupdf.LINK_GOTO, pymupdf.LINK_NAMED]):
-                link_item = link_factory.createLink(link, page)
-                links.append(link_item)
+                link_object = link_factory.createLink(link, page)
 
-        return links
+                link_item = LinkItem(link_object)
+                parent.appendRow(link_item)
+
 
 class SearchItem(QtGui.QStandardItem):
     def __init__(self, result: dict):

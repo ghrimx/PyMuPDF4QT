@@ -236,7 +236,7 @@ class PdfViewer(QtWidgets.QWidget):
             self.pdfview.setDocument(self.fitzdoc)
             self.outline_model.setDocument(self.fitzdoc)
             self.search_model.setDocument(self.fitzdoc)
-            # self.link_model.setDocument(self.fitzdoc)
+            # self.link_model.setDocument(self.fitzdoc)  # Performance issue
             self.metadata_tab.setMetadata(self.fitzdoc.metadata)
 
     def initViewer(self):
