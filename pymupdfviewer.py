@@ -21,17 +21,20 @@ logger = logging.getLogger(__name__)
 
 
 class PdfView(QtWidgets.QGraphicsView):
+    sigMouseMove = Signal(QtCore.QPointF)
 
     def __init__(self, parent=None):
         super(PdfView, self).__init__(parent)
+
+        self.setMouseTracking(True)
 
         self._page_navigator = PageNavigator(parent)
 
         self.page_count: int = 0
         self.page_dlist: pymupdf.DisplayList = None
 
-        self.zoom_factor = 1
-        self.max_zoom_factor = 3
+        self.zoom_factor = 1.0
+        self.max_zoom_factor = 3.0
         self.min_zoom_factor = 0.5
         self.zoom_factor_step = 0.25
  
@@ -53,6 +56,10 @@ class PdfView(QtWidgets.QGraphicsView):
         self.doc_scene.setSceneRect(self.page_pixmap_item.boundingRect()) 
         self.doc_scene.addRect(self.page_pixmap_item.boundingRect(), QtCore.Qt.GlobalColor.red)
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter | QtCore.Qt.AlignmentFlag.AlignHCenter)
+
+    def zoomFactor(self):
+        """Return the current zoom factor"""
+        return self.zoom_factor
     
     def showEvent(self, event: QtGui.QShowEvent | None) -> None:
         # r = self.rect().toRectF()
@@ -89,6 +96,7 @@ class PdfView(QtWidgets.QGraphicsView):
             self.render_page(self.pageNavigator().currentPage())
 
     def convert_to_QPixmap(self, fitzpix:pymupdf.Pixmap) -> QtGui.QPixmap:
+        """Convert pymupdf.Pixmap to QtGui.QPixmap"""
         fitzpix_bytes = fitzpix.tobytes()
         pixmap = QtGui.QPixmap()
         r = pixmap.loadFromData(fitzpix_bytes)
@@ -111,6 +119,7 @@ class PdfView(QtWidgets.QGraphicsView):
         self.doc_scene.addItem(item)
     
     def create_fitzpix(self, page_dlist: pymupdf.DisplayList, zoom_factor=1) -> pymupdf.Pixmap:
+        """Create pymupdf.Pixmap applying zoom factor"""
         mat = pymupdf.Matrix(zoom_factor, zoom_factor)  # zoom matrix
         fitzpix: pymupdf.Pixmap = page_dlist.get_pixmap(alpha=0, matrix=mat)
         return fitzpix
@@ -203,19 +212,27 @@ class PdfView(QtWidgets.QGraphicsView):
             else:
                 self.verticalScrollBar().setValue(self.verticalScrollBar().sliderPosition() - event.angleDelta().y())
 
-    def position(self):
-        point = self.mapFromGlobal(QtGui.QCursor.pos())
-        if not self.geometry().contains(point):
-            coord = random.randint(36, 144)
-            point = QtCore.QPoint(coord, coord)
-        else:
-            if point == self.prevPoint:
-                point += QtCore.QPoint(self.addOffset, self.addOffset)
-                self.addOffset += 5
-            else:
-                self.addOffset = 5
-                self.prevPoint = point
-        return self.mapToScene(point)
+    # def position(self):
+    #     point = self.mapFromGlobal(QtGui.QCursor.pos())
+    #     if not self.geometry().contains(point):
+    #         coord = random.randint(36, 144)
+    #         point = QtCore.QPoint(coord, coord)
+    #     else:
+    #         if point == self.prevPoint:
+    #             point += QtCore.QPoint(self.addOffset, self.addOffset)
+    #             self.addOffset += 5
+    #         else:
+    #             self.addOffset = 5
+    #             self.prevPoint = point
+    #     return self.mapToScene(point)
+
+    def currentPage(self) -> pymupdf.Page:
+        return self.fitzdoc.load_page(self.pageNavigator().currentPage())
+
+    def mouseMoveEvent(self, event):
+        """Emit mouse position"""
+        self.sigMouseMove.emit(event.position())
+        return super().mouseMoveEvent(event)
     
     @Slot(QtCore.QPointF)
     def scrollTo(self, location: QtCore.QPointF | int):
@@ -252,7 +269,10 @@ class PdfViewer(QtWidgets.QWidget):
         self.link_model = LinkModel()
         self.search_model = SearchModel()
 
-        # Toolbar button        
+        # Toolbar button 
+
+        ## Temp
+        self.mouse_position = QtWidgets.QLabel()       
 
         self.capture_area = QtGui.QAction(QtGui.QIcon(':capture_area'), "Capture", self)
         self.capture_area.setShortcut(QtGui.QKeySequence("ctrl+alt+s"))
@@ -294,6 +314,9 @@ class PdfViewer(QtWidgets.QWidget):
         self._toolbar.addAction(self.capture_area)
         self._toolbar.addAction(self.mark_pen)
         self._toolbar.add_spacer()
+
+        ## Temp
+        self._toolbar.addWidget(self.mouse_position)
         
         # Left Sidebar
         self.left_pane = QtWidgets.QTabWidget(self)
@@ -361,6 +384,16 @@ class PdfViewer(QtWidgets.QWidget):
 
         # Collapse Left Side pane by default
         self.onFoldLeftSidebarTriggered()
+
+        # Signals connection
+        self.pdfview.sigMouseMove.connect(self.updateMousePosition)
+
+    @Slot(QtCore.QPointF)
+    def updateMousePosition(self, p: QtCore.QPointF):
+        q = self.pdfview.mapToScene(p.toPoint())
+        page = self.pdfview.currentPage()
+        self.mouse_position.setText(f"{q.x()} - {q.y()}")
+
 
     @Slot(str)
     def onSearchFound(self, count: str):
