@@ -134,6 +134,7 @@ class PdfView(QtWidgets.QGraphicsView):
         add_annotations = self.annotations.get(pno)
         if add_annotations is not None:
 
+            quads: pymupdf.Quad
             for quads in add_annotations:
                 page.add_highlight_annot(quads)
             page_dlist = page.get_displaylist()
@@ -252,10 +253,6 @@ class PdfViewer(QtWidgets.QWidget):
         self.search_model = SearchModel()
 
         # Toolbar button        
-        self.search_LineEdit = QtWidgets.QLineEdit()
-        self.search_LineEdit.setPlaceholderText("Find in document")
-        self.search_LineEdit.setFixedWidth(180)
-        self.search_LineEdit.editingFinished.connect(self.searchFor)
 
         self.capture_area = QtGui.QAction(QtGui.QIcon(':capture_area'), "Capture", self)
         self.capture_area.setShortcut(QtGui.QKeySequence("ctrl+alt+s"))
@@ -297,7 +294,6 @@ class PdfViewer(QtWidgets.QWidget):
         self._toolbar.addAction(self.capture_area)
         self._toolbar.addAction(self.mark_pen)
         self._toolbar.add_spacer()
-        self._toolbar.addWidget(self.search_LineEdit)
         
         # Left Sidebar
         self.left_pane = QtWidgets.QTabWidget(self)
@@ -324,14 +320,19 @@ class PdfViewer(QtWidgets.QWidget):
         search_tab_layout = QtWidgets.QVBoxLayout()
         search_tab.setLayout(search_tab_layout)
 
+        self.search_LineEdit = QtWidgets.QLineEdit()
+        self.search_LineEdit.setPlaceholderText("Find in document")
+        self.search_LineEdit.editingFinished.connect(self.searchFor)
+        
+        self.search_count = QtWidgets.QLabel("Hits: ")
+
         self.search_results = QtWidgets.QTreeView(self.left_pane)
         self.search_results.setModel(self.search_model)
         self.search_results.setHeaderHidden(True)
         self.search_results.setRootIsDecorated(False)
         self.search_results.selectionModel().selectionChanged.connect(self.onSearchResultSelected)
 
-        self.search_count = QtWidgets.QLabel("Hits: ")
-
+        search_tab_layout.addWidget(self.search_LineEdit)
         search_tab_layout.addWidget(self.search_count)
         search_tab_layout.addWidget(self.search_results)
         self.left_pane.addTab(search_tab, "Search")
