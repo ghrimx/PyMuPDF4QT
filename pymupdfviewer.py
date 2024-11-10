@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 class PdfView(QtWidgets.QGraphicsView):
     sigMouseMove = Signal(QtCore.QPointF)
+    sigStartSelection = Signal(QtCore.QPointF)
+    sigEndSelection = Signal(QtCore.QPointF)
 
     def __init__(self, parent=None):
         super(PdfView, self).__init__(parent)
@@ -54,7 +56,7 @@ class PdfView(QtWidgets.QGraphicsView):
         self.setRenderHint(QtGui.QPainter.RenderHint.TextAntialiasing)
 
         self.doc_scene.setSceneRect(self.page_pixmap_item.boundingRect()) 
-        self.doc_scene.addRect(self.page_pixmap_item.boundingRect(), QtCore.Qt.GlobalColor.red)
+        self.doc_scene.addRect(self.page_pixmap_item.boundingRect(), QtCore.Qt.GlobalColor.red) # TEMP
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter | QtCore.Qt.AlignmentFlag.AlignHCenter)
 
     def zoomFactor(self):
@@ -129,6 +131,10 @@ class PdfView(QtWidgets.QGraphicsView):
         self.annotations.update(annotations)
     
     def render_page(self, pno=0):
+        """
+            Render the image
+            Convert the pymupdf Displaylist to QPixmap
+        """
         page_dlist: pymupdf.DisplayList = self.dlist[pno]
 
         if not page_dlist :  # create if not yet there
@@ -139,7 +145,7 @@ class PdfView(QtWidgets.QGraphicsView):
         # Remove annotations
         page = self.fitzdoc.load_page(pno)
         self.fitzdoc.xref_set_key(page.xref, "Annots", "null")
-        
+
         add_annotations = self.annotations.get(pno)
         if add_annotations is not None:
 
@@ -158,6 +164,12 @@ class PdfView(QtWidgets.QGraphicsView):
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignCenter)
         self.doc_scene.setSceneRect(self.page_pixmap_item.boundingRect()) 
         self.viewport().update()
+
+        # TEMP
+        # print(f"mediabox x():{page.mediabox.x1}; {page.mediabox.y1}")
+        print(f"mediabox size:{page.mediabox.width}; {page.mediabox.height}")
+        print(f"doc_scene size: {self.doc_scene.width()}, {self.doc_scene.height()}")
+        print(f"zoom factor: {self.zoom_factor}")
 
     def setRotation(self, degree):
         pno = self.pageNavigator().currentPage()
@@ -227,12 +239,42 @@ class PdfView(QtWidgets.QGraphicsView):
     #     return self.mapToScene(point)
 
     def currentPage(self) -> pymupdf.Page:
+        """Return Pymupdf current Page"""
         return self.fitzdoc.load_page(self.pageNavigator().currentPage())
 
     def mouseMoveEvent(self, event):
         """Emit mouse position"""
         self.sigMouseMove.emit(event.position())
+
+        self.current_point = event.position()
         return super().mouseMoveEvent(event)
+    
+    def mousePressEvent(self, event):
+        self.a0 = self.mapToScene(event.position().toPoint())
+        self.b0 = self.mapToScene(event.position().toPoint())
+        self.sigStartSelection.emit(event.position())
+        return super().mousePressEvent(event)
+    
+    def mouseReleaseEvent(self, event):
+        self.sigEndSelection.emit(event.position())
+
+        # TEMP
+        # Draw rect
+        self.a1: QtCore.QPointF = self.mapToScene(self.current_point.toPoint())
+        self.b1: QtCore.QPointF = self.mapToScene(self.current_point.toPoint())
+        rect = QtCore.QRectF(self.a0, self.b1)
+        print(f"rect: {rect.getCoords()}")
+        r = QtWidgets.QGraphicsRectItem(rect)
+        brush = QtGui.QPen(QtCore.Qt.GlobalColor.red)
+        r.setPen(brush)
+        self.doc_scene.addItem(r)
+
+
+        page = self.fitzdoc.load_page(self.pageNavigator().currentPage())
+        zf = self.zoom_factor
+        prect = pymupdf.Rect(self.a0.x()/zf, self.a0.y()/zf, self.a1.x()/zf, self.b1.y()/zf)
+        print(page.get_textbox(prect))
+        return super().mouseReleaseEvent(event)
     
     @Slot(QtCore.QPointF)
     def scrollTo(self, location: QtCore.QPointF | int):
@@ -271,7 +313,7 @@ class PdfViewer(QtWidgets.QWidget):
 
         # Toolbar button 
 
-        ## Temp
+        ## TEMP
         self.mouse_position = QtWidgets.QLabel()       
 
         self.capture_area = QtGui.QAction(QtGui.QIcon(':capture_area'), "Capture", self)
@@ -315,7 +357,7 @@ class PdfViewer(QtWidgets.QWidget):
         self._toolbar.addAction(self.mark_pen)
         self._toolbar.add_spacer()
 
-        ## Temp
+        ## TEMP
         self._toolbar.addWidget(self.mouse_position)
         
         # Left Sidebar
@@ -388,11 +430,13 @@ class PdfViewer(QtWidgets.QWidget):
         # Signals connection
         self.pdfview.sigMouseMove.connect(self.updateMousePosition)
 
+    # TEMP
     @Slot(QtCore.QPointF)
     def updateMousePosition(self, p: QtCore.QPointF):
         q = self.pdfview.mapToScene(p.toPoint())
-        page = self.pdfview.currentPage()
-        self.mouse_position.setText(f"{q.x()} - {q.y()}")
+        zoom = self.pdfview.zoom_factor
+        if self.pdfview.page_pixmap_item.contains(q):
+            self.mouse_position.setText(f"{q.x()} - {q.y()}\n{q.x()/zoom} - {q.y()/zoom}")
 
 
     @Slot(str)
