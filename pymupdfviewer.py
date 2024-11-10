@@ -1,13 +1,8 @@
 import pymupdf
-import fitz
-import sys
-import pathlib
 import logging
-import random
 
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
-from enum import Enum
 from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, SearchModel, LinkModel, LinkItem, GoToLink, NamedLink, SearchItem, MetaDataWidget
 
 from resources import qrc_resources
@@ -224,56 +219,37 @@ class PdfView(QtWidgets.QGraphicsView):
             else:
                 self.verticalScrollBar().setValue(self.verticalScrollBar().sliderPosition() - event.angleDelta().y())
 
-    # def position(self):
-    #     point = self.mapFromGlobal(QtGui.QCursor.pos())
-    #     if not self.geometry().contains(point):
-    #         coord = random.randint(36, 144)
-    #         point = QtCore.QPoint(coord, coord)
-    #     else:
-    #         if point == self.prevPoint:
-    #             point += QtCore.QPoint(self.addOffset, self.addOffset)
-    #             self.addOffset += 5
-    #         else:
-    #             self.addOffset = 5
-    #             self.prevPoint = point
-    #     return self.mapToScene(point)
-
-    def currentPage(self) -> pymupdf.Page:
+    def getPage(self) -> pymupdf.Page:
         """Return Pymupdf current Page"""
         return self.fitzdoc.load_page(self.pageNavigator().currentPage())
 
     def mouseMoveEvent(self, event):
-        """Emit mouse position"""
-        self.sigMouseMove.emit(event.position())
-
-        self.current_point = event.position()
+        if self.page_pixmap_item.contains(event.position()):
+            self.cursor_position = event.position()
         return super().mouseMoveEvent(event)
     
     def mousePressEvent(self, event):
         self.a0 = self.mapToScene(event.position().toPoint())
         self.b0 = self.mapToScene(event.position().toPoint())
-        self.sigStartSelection.emit(event.position())
         return super().mousePressEvent(event)
     
     def mouseReleaseEvent(self, event):
-        self.sigEndSelection.emit(event.position())
-
         # TEMP
         # Draw rect
-        self.a1: QtCore.QPointF = self.mapToScene(self.current_point.toPoint())
-        self.b1: QtCore.QPointF = self.mapToScene(self.current_point.toPoint())
+        self.a1: QtCore.QPointF = self.mapToScene(self.cursor_position.toPoint())
+        self.b1: QtCore.QPointF = self.mapToScene(self.cursor_position.toPoint())
         rect = QtCore.QRectF(self.a0, self.b1)
-        print(f"rect: {rect.getCoords()}")
+
         r = QtWidgets.QGraphicsRectItem(rect)
         brush = QtGui.QPen(QtCore.Qt.GlobalColor.red)
         r.setPen(brush)
         self.doc_scene.addItem(r)
 
-
-        page = self.fitzdoc.load_page(self.pageNavigator().currentPage())
+        page = self.getPage()
         zf = self.zoom_factor
         prect = pymupdf.Rect(self.a0.x()/zf, self.a0.y()/zf, self.a1.x()/zf, self.b1.y()/zf)
         print(page.get_textbox(prect))
+
         return super().mouseReleaseEvent(event)
     
     @Slot(QtCore.QPointF)
@@ -312,10 +288,6 @@ class PdfViewer(QtWidgets.QWidget):
         self.search_model = SearchModel()
 
         # Toolbar button 
-
-        ## TEMP
-        self.mouse_position = QtWidgets.QLabel()       
-
         self.capture_area = QtGui.QAction(QtGui.QIcon(':capture_area'), "Capture", self)
         self.capture_area.setShortcut(QtGui.QKeySequence("ctrl+alt+s"))
         # self.capture_area.triggered.connect()
@@ -356,9 +328,6 @@ class PdfViewer(QtWidgets.QWidget):
         self._toolbar.addAction(self.capture_area)
         self._toolbar.addAction(self.mark_pen)
         self._toolbar.add_spacer()
-
-        ## TEMP
-        self._toolbar.addWidget(self.mouse_position)
         
         # Left Sidebar
         self.left_pane = QtWidgets.QTabWidget(self)
@@ -426,18 +395,6 @@ class PdfViewer(QtWidgets.QWidget):
 
         # Collapse Left Side pane by default
         self.onFoldLeftSidebarTriggered()
-
-        # Signals connection
-        self.pdfview.sigMouseMove.connect(self.updateMousePosition)
-
-    # TEMP
-    @Slot(QtCore.QPointF)
-    def updateMousePosition(self, p: QtCore.QPointF):
-        q = self.pdfview.mapToScene(p.toPoint())
-        zoom = self.pdfview.zoom_factor
-        if self.pdfview.page_pixmap_item.contains(q):
-            self.mouse_position.setText(f"{q.x()} - {q.y()}\n{q.x()/zoom} - {q.y()/zoom}")
-
 
     @Slot(str)
     def onSearchFound(self, count: str):
