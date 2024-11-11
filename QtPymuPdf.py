@@ -61,12 +61,12 @@ class ZoomSelector(QtWidgets.QComboBox):
 
 
 class PageNavigator(QtWidgets.QWidget):
-    currentPageChanged = Signal(int)
+    currentPnoChanged = Signal(int)
     currentLocationChanged = Signal(QtCore.QPointF)
 
     def __init__(self, parent: QtWidgets = None):
         super().__init__()
-        self._current_page: int = None
+        self._current_pno: int = None  # pno : page number
         self._current_page_label: str = ""
         self._current_location: QtCore.QPointF = QtCore.QPointF()
         self._page_index:  dict[str, int] = {}
@@ -110,6 +110,7 @@ class PageNavigator(QtWidgets.QWidget):
         self.indexPages()
 
     def indexPages(self):
+        page: pymupdf.Page
         for page in self._document:
             self._page_index.update({page.get_label() : page.number})
     
@@ -122,32 +123,32 @@ class PageNavigator(QtWidgets.QWidget):
         if page_label != "":
             self.currentpage_lineedit.setText(page_label)
         else:
-            self.currentpage_lineedit.setText(f"{self.currentPage() + 1}")
+            self.currentpage_lineedit.setText(f"{self.currentPno() + 1}")
         
-        self.pagecount_label.setText(f"{self.currentPage() + 1} of {self._document.page_count}")
+        self.pagecount_label.setText(f"{self.currentPno() + 1} of {self._document.page_count}")
     
     def document(self):
         return self._document
     
-    def setCurrentPage(self, index: int):
-        old_index = self._current_page
+    def setCurrentPno(self, index: int):
+        old_index = self._current_pno
 
         if 0<= index < self._document.page_count:
-            self._current_page = index
+            self._current_pno = index
             self.updatePageLineEdit()
 
-            if old_index != self._current_page:
-                self.currentPageChanged.emit(self._current_page)
+            if old_index != self._current_pno:
+                self.currentPnoChanged.emit(self._current_pno)
 
     def currentPageLabel(self) -> str:
-        page: pymupdf.Page = self._document[self.currentPage()]
+        page: pymupdf.Page = self._document[self.currentPno()]
         return page.get_label()
 
-    def currentPage(self) -> int:
-        return self._current_page
+    def currentPno(self) -> int:
+        return self._current_pno
     
     def jump(self, page: int, location = QtCore.QPointF()):
-        self.setCurrentPage(page)
+        self.setCurrentPno(page)
         self._current_location = location
         self.currentLocationChanged.emit(location)  
 
@@ -167,11 +168,11 @@ class PageNavigator(QtWidgets.QWidget):
   
     @Slot()
     def next(self):
-        self.jump(self.currentPage() + 1, QtCore.QPointF())
+        self.jump(self.currentPno() + 1, QtCore.QPointF())
 
     @Slot()
     def previous(self):
-        self.jump(self.currentPage() - 1, QtCore.QPointF())
+        self.jump(self.currentPno() - 1, QtCore.QPointF())
 
 class Kind(Enum):
     LINK_NONE = 0
