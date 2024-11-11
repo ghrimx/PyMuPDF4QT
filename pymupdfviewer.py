@@ -3,7 +3,7 @@ import logging
 
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
-from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, SearchModel, LinkModel, LinkItem, GoToLink, NamedLink, SearchItem, MetaDataWidget
+from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, SearchModel, LinkModel, LinkItem, GoToLink, NamedLink, SearchItem, MetaDataWidget, TextSelection
 
 from resources import qrc_resources
 
@@ -26,6 +26,7 @@ class PdfView(QtWidgets.QGraphicsView):
         self.setMouseTracking(True)
 
         self._page_navigator = PageNavigator(parent)
+        self._zoom_selector = ZoomSelector(parent)
 
         self.page_count: int = 0
         self.page_dlist: pymupdf.DisplayList = None
@@ -49,10 +50,6 @@ class PdfView(QtWidgets.QGraphicsView):
 
         self.doc_scene.setSceneRect(self.page_pixmap_item.boundingRect()) 
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter | QtCore.Qt.AlignmentFlag.AlignHCenter)
-
-    def zoomFactor(self):
-        """Return the current zoom factor"""
-        return self.zoom_factor
     
     def showEvent(self, event: QtGui.QShowEvent | None) -> None:
         return super().showEvent(event)
@@ -64,8 +61,11 @@ class PdfView(QtWidgets.QGraphicsView):
         self.dlist: list[pymupdf.DisplayList] = [None] * self.page_count
         self._page_navigator.setCurrentPno(0)
 
-    def pageNavigator(self):
+    def pageNavigator(self) -> PageNavigator:
         return self._page_navigator
+    
+    def zoomSelector(self) -> ZoomSelector:
+        return self._zoom_selector
     
     @Slot(ZoomSelector.ZoomMode)
     def setZoomMode(self, mode: ZoomSelector.ZoomMode):
@@ -78,10 +78,10 @@ class PdfView(QtWidgets.QGraphicsView):
         page_height = self.dlist[self.pageNavigator().currentPno()].rect.height
         
         if mode == ZoomSelector.ZoomMode.FitToWidth:
-            self.zoom_factor = (view_width - content_margins.left() - content_margins.right() - 20) / page_width
+            self._zoom_selector.zoomFactor = (view_width - content_margins.left() - content_margins.right() - 20) / page_width
             self.renderPage(self.pageNavigator().currentPno())
         elif mode == ZoomSelector.ZoomMode.FitInView:
-            self.zoom_factor = (view_height - content_margins.bottom() - content_margins.top() -20) / page_height
+            self._zoom_selector.zoomFactor = (view_height - content_margins.bottom() - content_margins.top() -20) / page_height
             self.renderPage(self.pageNavigator().currentPno())
 
     def convert_to_QPixmap(self, fitzpix:pymupdf.Pixmap) -> QtGui.QPixmap:
@@ -141,7 +141,7 @@ class PdfView(QtWidgets.QGraphicsView):
                 page.add_highlight_annot(quads)
             page_dlist = page.get_displaylist()
 
-        fitzpix = self.create_fitzpix(page_dlist, self.zoom_factor)
+        fitzpix = self.create_fitzpix(page_dlist, self._zoom_selector.zoomFactor)
         pixmap = self.convert_to_QPixmap(fitzpix)
         self.page_pixmap_item.setPixmap(pixmap)
 
@@ -178,13 +178,13 @@ class PdfView(QtWidgets.QGraphicsView):
             anchor = self.transformationAnchor()
             self.setTransformationAnchor(QtWidgets.QGraphicsView.ViewportAnchor.AnchorUnderMouse)
             if event.angleDelta().y() > 0:
-                self.zoom_factor += self.zoom_factor_step
+                self._zoom_selector.zoomIn()
             else:
-                self.zoom_factor -= self.zoom_factor_step
-            while self.zoom_factor >= self.max_zoom_factor:
-                self.zoom_factor -= self.zoom_factor_step
-            while self.zoom_factor < self.min_zoom_factor:
-                self.zoom_factor += self.zoom_factor_step
+                self._zoom_selector.zoomOut()
+            while self._zoom_selector.zoomFactor >= self._zoom_selector.max_zoom_factor:
+                self._zoom_selector.zoomOut()
+            while self._zoom_selector.zoomFactor < self._zoom_selector.min_zoom_factor:
+                self._zoom_selector.zoomIn()
             self.renderPage(self.pageNavigator().currentPno())
             self.setTransformationAnchor(anchor)
             # self.doc_view.centerOn(self.doc_view.mapFromGlobal(pointer_position))
@@ -230,12 +230,20 @@ class PdfView(QtWidgets.QGraphicsView):
         r.setPen(brush)
         self.doc_scene.addItem(r)
 
-        page = self.getPage()
-        zf = self.zoom_factor
-        prect = pymupdf.Rect(self.a0.x()/zf, self.a0.y()/zf, self.a1.x()/zf, self.b1.y()/zf)
-        print(page.get_textbox(prect))
+        # TEMP
+        t = self.getSelection(self.pageNavigator().currentPno(), self.a0, self.b1)
+        print(t.text)
 
         return super().mouseReleaseEvent(event)
+    
+    def getSelection(self, pno: int, a0: QtCore.QPointF, b1: QtCore.QPointF) -> TextSelection:
+        """Return TextSelection from selection points"""
+        page: pymupdf.Page = self.fitzdoc.load_page(pno)
+        zf = self._zoom_selector.zoomFactor
+        rect = pymupdf.Rect(a0.x() / zf, a0.y() / zf, b1.x() / zf, b1.y() / zf)
+        text_selection = TextSelection()
+        text_selection.text = page.get_textbox(rect)
+        return text_selection
     
     @Slot(QtCore.QPointF)
     def scrollTo(self, location: QtCore.QPointF | int):
@@ -285,6 +293,8 @@ class PdfViewer(QtWidgets.QWidget):
         # self.mark_pen_btn.clicked.connect(self.zoom)
 
         self.page_navigator = self.pdfview.pageNavigator()
+        self.zoom_selector = self.pdfview.zoomSelector()
+        self.zoom_selector.hide()
         
         # Zoom
         self.action_fitwidth = QtGui.QAction(QtGui.QIcon(':expand-width-fill'), "Fit Width", self)

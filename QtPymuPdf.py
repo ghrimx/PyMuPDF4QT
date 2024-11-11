@@ -18,11 +18,15 @@ class ZoomSelector(QtWidgets.QComboBox):
     zoomModeChanged = Signal(ZoomMode)
     zoomFactorChanged = Signal(float)
     zoom_levels = ["Fit Width", "Fit Page", "12%", "25%", "33%", "50%", "66%", "75%", "100%", "125%", "150%", "200%", "400%"]
-    zoom_multiplier = sqrt(2.0)
+    max_zoom_factor = 3.0
+    min_zoom_factor = 0.5
+    zoom_factor_step = 0.25
 
-    def __init__(self, parent):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setEditable(True)
+
+        self._zoom_factor: float = 1.0
 
         for zoom_level in self.zoom_levels:
             self.addItem(zoom_level)
@@ -30,13 +34,28 @@ class ZoomSelector(QtWidgets.QComboBox):
         self.currentTextChanged.connect(self.onCurrentTextChanged)
         self.lineEdit().editingFinished.connect(self._editingFinished)
 
+    @property
+    def zoomFactor(self) -> float:
+        return self._zoom_factor
+
+    @zoomFactor.setter
+    def zoomFactor(self, zoom_factor):
+        self._zoom_factor = zoom_factor
+        self.setZoomFactor(self._zoom_factor)
+
+    def zoomIn(self):
+        self.zoomFactor += self.zoom_factor_step
+
+    def zoomOut(self):
+        self.zoomFactor -= self.zoom_factor_step
+
     @Slot()
     def _editingFinished(self):
         self.onCurrentTextChanged(self.lineEdit().text())
 
     @Slot(float)
-    def setZoomFactor(self, zoomFactor):
-        zoom_level = int(100 * zoomFactor)
+    def setZoomFactor(self, zf):
+        zoom_level = int(100 * zf)
         self.setCurrentText(f"{zoom_level}%")
 
     @Slot()
@@ -408,3 +427,25 @@ class MetaDataWidget(QtWidgets.QWidget):
     def setMetadata(self, metadata: dict):
         self._metadata = '\n'.join(f"{key} : {val}" for key, val in metadata.items())
         self.metadata_label.setText(self._metadata.strip())
+
+
+class TextSelection:
+    def __init__(self, s: str = ""):
+        self._text: str = s
+        self._quads = []
+
+    @property
+    def text(self):
+        return self._text
+
+    @text.setter
+    def text(self, s: str):
+        self._text = s
+
+    @property
+    def quads(self):
+        return self._quads
+
+    @quads.setter
+    def quads(self, q):
+        self._quads = q
