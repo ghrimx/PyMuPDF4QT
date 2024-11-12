@@ -23,6 +23,9 @@ class PdfView(QtWidgets.QGraphicsView):
     def __init__(self, parent=None):
         super(PdfView, self).__init__(parent)
 
+        # TEMP
+        self._current_rect_item = None
+
         self.setMouseTracking(True)
 
         self._page_navigator = PageNavigator(parent)
@@ -208,27 +211,42 @@ class PdfView(QtWidgets.QGraphicsView):
         """Return Pymupdf current Page"""
         return self.fitzdoc.load_page(self.pageNavigator().currentPno())
 
-    def mouseMoveEvent(self, event):
-        if self.page_pixmap_item.contains(event.position()):
-            self.cursor_position = event.position()
-        return super().mouseMoveEvent(event)
-    
     def mousePressEvent(self, event):
         self.a0 = self.mapToScene(event.position().toPoint())
-        self.b0 = self.mapToScene(event.position().toPoint())
-        return super().mousePressEvent(event)
+        self.paint_path = QtGui.QPainterPath()
+
+        # TEMP
+        self._current_rect_item = QtWidgets.QGraphicsRectItem()
+        self._current_rect_item.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.red))
+        r = QtCore.QRectF(self.a0, self.a0)
+        self._current_rect_item.setRect(r)
+        self.doc_scene.addItem(self._current_rect_item)
+
+        self.update()
+        # return super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        self.cursor_position = event.position()
+
+        # TEMP
+        if self._current_rect_item is not None:
+            r = QtCore.QRectF(self.a0, self.mapToScene(event.position().toPoint())).normalized()
+            self._current_rect_item.setRect(r)
+            self.update()
+        # return super().mouseMoveEvent(event)
     
     def mouseReleaseEvent(self, event):
         # TEMP
         # Draw rect
-        self.a1: QtCore.QPointF = self.mapToScene(self.cursor_position.toPoint())
         self.b1: QtCore.QPointF = self.mapToScene(self.cursor_position.toPoint())
-        rect = QtCore.QRectF(self.a0, self.b1)
+        
+        # rect = QtCore.QRectF(self.a0, self.b1)
+        # r = QtWidgets.QGraphicsRectItem(rect)
+        # brush = QtGui.QPen(QtCore.Qt.GlobalColor.red)
+        # r.setPen(brush)
+        # self.doc_scene.addItem(r)
 
-        r = QtWidgets.QGraphicsRectItem(rect)
-        brush = QtGui.QPen(QtCore.Qt.GlobalColor.red)
-        r.setPen(brush)
-        self.doc_scene.addItem(r)
+        self._current_rect_item = None
 
         # TEMP
         t = self.getSelection(self.pageNavigator().currentPno(), self.a0, self.b1)
