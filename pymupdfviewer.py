@@ -1,6 +1,8 @@
 import pymupdf
 import logging
 
+from enum import Enum
+
 from PyQt6 import QtWidgets, QtGui, QtCore
 from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
 from QtPymuPdf import OutlineModel, OutlineItem, PageNavigator, ZoomSelector, SearchModel, LinkModel, LinkItem, GoToLink, NamedLink, SearchItem, MetaDataWidget, TextSelection
@@ -15,16 +17,36 @@ SUPPORTED_FORMART = ("png", "jpg", "jpeg", "bmp", "tiff", "pnm", "pam", "ps", "s
 logger = logging.getLogger(__name__)
 
 
-class PdfView(QtWidgets.QGraphicsView):
-    sigMouseMove = Signal(QtCore.QPointF)
-    sigStartSelection = Signal(QtCore.QPointF)
-    sigEndSelection = Signal(QtCore.QPointF)
+class MouseInteraction:
+    class InteractionType(Enum):
+        NONE = 0
+        TEXTSELECTION = 1
+        SCREENCAPTURE = 2
+        HIGHLIGHT = 3
+        WRITESIMPLETEXT = 4 
 
+    def __init__(self, i: InteractionType = InteractionType.NONE):
+        self._interaction = i
+
+    @property
+    def interaction(self):
+        return self._interaction
+
+    @interaction.setter
+    def interaction(self, i: InteractionType):
+        self._interaction = i
+
+
+class PdfView(QtWidgets.QGraphicsView):
     def __init__(self, parent=None):
         super(PdfView, self).__init__(parent)
 
         # TEMP
         self._current_rect_item = None
+        # Mouse coordinate
+        self.mouse_interaction = MouseInteraction()
+        self.a0 = QtCore.QPointF()
+        self.b1 = QtCore.QPointF()
 
         self.setMouseTracking(True)
 
@@ -87,7 +109,7 @@ class PdfView(QtWidgets.QGraphicsView):
             self._zoom_selector.zoomFactor = (view_height - content_margins.bottom() - content_margins.top() -20) / page_height
             self.renderPage(self.pageNavigator().currentPno())
 
-    def convert_to_QPixmap(self, fitzpix:pymupdf.Pixmap) -> QtGui.QPixmap:
+    def toQPixmap(self, fitzpix:pymupdf.Pixmap) -> QtGui.QPixmap:
         """Convert pymupdf.Pixmap to QtGui.QPixmap"""
         fitzpix_bytes = fitzpix.tobytes()
         pixmap = QtGui.QPixmap()
@@ -106,11 +128,11 @@ class PdfView(QtWidgets.QGraphicsView):
 
         return item
 
-    def add_pixmap(self, pixmap):
+    def addPixmap(self, pixmap):
         item = self.createPixmapItem(pixmap)
         self.doc_scene.addItem(item)
     
-    def create_fitzpix(self, page_dlist: pymupdf.DisplayList, zoom_factor=1) -> pymupdf.Pixmap:
+    def createFitzpix(self, page_dlist: pymupdf.DisplayList, zoom_factor=1) -> pymupdf.Pixmap:
         """Create pymupdf.Pixmap applying zoom factor"""
         mat = pymupdf.Matrix(zoom_factor, zoom_factor)  # zoom matrix
         fitzpix: pymupdf.Pixmap = page_dlist.get_pixmap(alpha=0, matrix=mat)
@@ -144,8 +166,8 @@ class PdfView(QtWidgets.QGraphicsView):
                 page.add_highlight_annot(quads)
             page_dlist = page.get_displaylist()
 
-        fitzpix = self.create_fitzpix(page_dlist, self._zoom_selector.zoomFactor)
-        pixmap = self.convert_to_QPixmap(fitzpix)
+        fitzpix = self.createFitzpix(page_dlist, self._zoom_selector.zoomFactor)
+        pixmap = self.toQPixmap(fitzpix)
         self.page_pixmap_item.setPixmap(pixmap)
 
         self.centerOn(self.page_pixmap_item)
@@ -213,15 +235,15 @@ class PdfView(QtWidgets.QGraphicsView):
 
     def mousePressEvent(self, event):
         self.a0 = self.mapToScene(event.position().toPoint())
-        self.paint_path = QtGui.QPainterPath()
 
-        # TEMP
-        self._current_rect_item = QtWidgets.QGraphicsRectItem()
-        self._current_rect_item.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.red))
-        r = QtCore.QRectF(self.a0, self.a0)
-        self._current_rect_item.setRect(r)
-        self.doc_scene.addItem(self._current_rect_item)
+        # # TEMP
+        # self._current_rect_item = QtWidgets.QGraphicsRectItem()
+        # self._current_rect_item.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.red))
+        # r = QtCore.QRectF(self.a0, self.a0)
+        # self._current_rect_item.setRect(r)
+        # self.doc_scene.addItem(self._current_rect_item)
 
+        self.startMouseInteraction()
         self.update()
         # return super().mousePressEvent(event)
     
@@ -246,13 +268,32 @@ class PdfView(QtWidgets.QGraphicsView):
         # r.setPen(brush)
         # self.doc_scene.addItem(r)
 
+        # self._current_rect_item = None
+
+        # # TEMP
+        # t = self.getSelection(self.pageNavigator().currentPno(), self.a0, self.b1)
+        # print(t.text)
+        self.endMouseInteraction()
+        self.update()
+
+        return super().mouseReleaseEvent(event)
+    
+    def startMouseInteraction(self):
+        if self.mouse_interaction.interaction == MouseInteraction.InteractionType.TEXTSELECTION:
+             # TEMP
+            self._current_rect_item = QtWidgets.QGraphicsRectItem()
+            self._current_rect_item.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.red))
+            r = QtCore.QRectF(self.a0, self.a0)
+            self._current_rect_item.setRect(r)
+            self.doc_scene.addItem(self._current_rect_item)
+
+    def endMouseInteraction(self):
         self._current_rect_item = None
 
         # TEMP
         t = self.getSelection(self.pageNavigator().currentPno(), self.a0, self.b1)
         print(t.text)
 
-        return super().mouseReleaseEvent(event)
     
     def getSelection(self, pno: int, a0: QtCore.QPointF, b1: QtCore.QPointF) -> TextSelection:
         """Return TextSelection from selection points"""
@@ -298,17 +339,27 @@ class PdfViewer(QtWidgets.QWidget):
         self.link_model = LinkModel()
         self.search_model = SearchModel()
 
-        # Toolbar button 
+        # Toolbar button
+        self.mouse_action_group = QtGui.QActionGroup(self)
+        self.mouse_action_group.setExclusionPolicy(QtGui.QActionGroup.ExclusionPolicy.ExclusiveOptional)
+
         self.text_selector = QtGui.QAction(QtGui.QIcon(':text-block'), "Text Selection", self)
         self.text_selector.setCheckable(True)
         self.text_selector.setShortcut(QtGui.QKeySequence("ctrl+alt+t"))
+        self.text_selector.triggered.connect(lambda: self.triggerMouseAction(MouseInteraction.InteractionType.TEXTSELECTION))
 
         self.capture_area = QtGui.QAction(QtGui.QIcon(':capture_area'), "Capture", self)
+        self.capture_area.setCheckable(True)
         self.capture_area.setShortcut(QtGui.QKeySequence("ctrl+alt+s"))
-        # self.capture_area.triggered.connect()
+        self.capture_area.triggered.connect(lambda: self.triggerMouseAction(MouseInteraction.InteractionType.SCREENCAPTURE))
 
         self.mark_pen = QtGui.QAction(QtGui.QIcon(':mark_pen'), "Mark Text", self)
-        # self.mark_pen_btn.clicked.connect(self.zoom)
+        self.mark_pen.setCheckable(True)
+        self.mark_pen.triggered.connect(lambda: self.triggerMouseAction(MouseInteraction.InteractionType.HIGHLIGHT))
+
+        self.mouse_action_group.addAction(self.text_selector)
+        self.mouse_action_group.addAction(self.capture_area)
+        self.mouse_action_group.addAction(self.mark_pen)
 
         self.page_navigator = self.pdfview.pageNavigator()
         self.zoom_selector = self.pdfview.zoomSelector()
@@ -413,6 +464,10 @@ class PdfViewer(QtWidgets.QWidget):
 
         # Collapse Left Side pane by default
         self.onFoldLeftSidebarTriggered()
+
+    @Slot()
+    def triggerMouseAction(self, action: MouseInteraction.InteractionType):
+        self.pdfview.mouse_interaction.interaction = action
 
     @Slot(str)
     def onSearchFound(self, count: str):

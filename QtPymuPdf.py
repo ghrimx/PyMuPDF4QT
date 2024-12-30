@@ -83,7 +83,7 @@ class PageNavigator(QtWidgets.QWidget):
     currentPnoChanged = Signal(int)
     currentLocationChanged = Signal(QtCore.QPointF)
 
-    def __init__(self, parent: QtWidgets = None):
+    def __init__(self, parent: QtWidgets.QWidget = None):
         super().__init__()
         self._current_pno: int = None  # pno : page number
         self._current_page_label: str = ""
@@ -430,6 +430,11 @@ class MetaDataWidget(QtWidgets.QWidget):
 
 
 class TextSelection:
+    """ 
+        Class that holds the selected text as string and its corresponding quad.
+        Quad represents a four-sided mathematical shape (also called “quadrilateral” or “tetragon”) in the plane, defined as a sequence of four Point objects.
+        Quad is used to display the selected text.
+    """
     def __init__(self, s: str = ""):
         self._text: str = s
         self._quads = []
