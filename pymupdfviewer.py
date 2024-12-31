@@ -17,6 +17,32 @@ SUPPORTED_FORMART = ("png", "jpg", "jpeg", "bmp", "tiff", "pnm", "pam", "ps", "s
 logger = logging.getLogger(__name__)
 
 
+class RectItem(QtWidgets.QGraphicsRectItem):
+    def __init__(self, parent=None):
+        super(RectItem, self).__init__(parent)
+
+        self.setFlags(QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIsMovable | QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+
+        self._pno: int = -1
+        self._text: str = ""
+
+    @property
+    def text(self):
+        return self._text
+    
+    @text.setter
+    def text(self, s: str):
+        self._text = s
+
+    @property
+    def pno(self):
+        return self._pno
+    
+    @pno.setter
+    def pno(self, i: int):
+        self._pno = i 
+
+
 class MouseInteraction:
     class InteractionType(Enum):
         NONE = 0
@@ -42,14 +68,16 @@ class PdfView(QtWidgets.QGraphicsView):
         super(PdfView, self).__init__(parent)
 
         # TEMP
-        self._current_rect_item = None
+        self._current_graphic_item = None
         # Mouse coordinate
         self.mouse_interaction = MouseInteraction()
         self.a0 = QtCore.QPointF()
         self.b1 = QtCore.QPointF()
+        self.graphic_items = {} # pno : [QGraphicsItem]
 
         self.setMouseTracking(True)
-
+        self.setDragMode(QtWidgets.QGraphicsView.DragMode.RubberBandDrag)
+    
         self._page_navigator = PageNavigator(parent)
         self._zoom_selector = ZoomSelector(parent)
 
@@ -236,13 +264,6 @@ class PdfView(QtWidgets.QGraphicsView):
     def mousePressEvent(self, event):
         self.a0 = self.mapToScene(event.position().toPoint())
 
-        # # TEMP
-        # self._current_rect_item = QtWidgets.QGraphicsRectItem()
-        # self._current_rect_item.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.red))
-        # r = QtCore.QRectF(self.a0, self.a0)
-        # self._current_rect_item.setRect(r)
-        # self.doc_scene.addItem(self._current_rect_item)
-
         self.startMouseInteraction()
         self.update()
         # return super().mousePressEvent(event)
@@ -250,50 +271,53 @@ class PdfView(QtWidgets.QGraphicsView):
     def mouseMoveEvent(self, event):
         self.cursor_position = event.position()
 
-        # TEMP
-        if self._current_rect_item is not None:
+        if self._current_graphic_item is not None:
             r = QtCore.QRectF(self.a0, self.mapToScene(event.position().toPoint())).normalized()
-            self._current_rect_item.setRect(r)
+            self._current_graphic_item.setRect(r)
             self.update()
         # return super().mouseMoveEvent(event)
     
     def mouseReleaseEvent(self, event):
-        # TEMP
-        # Draw rect
         self.b1: QtCore.QPointF = self.mapToScene(self.cursor_position.toPoint())
         
-        # rect = QtCore.QRectF(self.a0, self.b1)
-        # r = QtWidgets.QGraphicsRectItem(rect)
-        # brush = QtGui.QPen(QtCore.Qt.GlobalColor.red)
-        # r.setPen(brush)
-        # self.doc_scene.addItem(r)
-
-        # self._current_rect_item = None
-
-        # # TEMP
-        # t = self.getSelection(self.pageNavigator().currentPno(), self.a0, self.b1)
-        # print(t.text)
-        self.endMouseInteraction()
-        self.update()
+        if self._current_graphic_item is not None:
+            self.endMouseInteraction()
+            self.update()
 
         return super().mouseReleaseEvent(event)
     
     def startMouseInteraction(self):
         if self.mouse_interaction.interaction == MouseInteraction.InteractionType.TEXTSELECTION:
-             # TEMP
-            self._current_rect_item = QtWidgets.QGraphicsRectItem()
-            self._current_rect_item.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.red))
+            self._current_graphic_item = RectItem()
+            self._current_graphic_item.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.red))
             r = QtCore.QRectF(self.a0, self.a0)
-            self._current_rect_item.setRect(r)
-            self.doc_scene.addItem(self._current_rect_item)
+            self._current_graphic_item.setRect(r)
+            self._current_graphic_item.pno = self.pageNavigator().currentPno()
+            self.doc_scene.addItem(self._current_graphic_item)
 
     def endMouseInteraction(self):
-        self._current_rect_item = None
+        self._current_graphic_item.text = self.getSelection(self.pageNavigator().currentPno(), self.a0, self.b1)
 
-        # TEMP
-        t = self.getSelection(self.pageNavigator().currentPno(), self.a0, self.b1)
-        print(t.text)
+        # save graphics
+        if self._page_navigator.currentPno() in self.graphic_items:
+            self.graphic_items[self._page_navigator.currentPno()].update({id(self._current_graphic_item) : self._current_graphic_item})
+        else:
+            self.graphic_items[self._page_navigator.currentPno()] = {id(self._current_graphic_item) : self._current_graphic_item}
 
+        self._current_graphic_item = None
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent):
+        if event == QtGui.QKeySequence.StandardKey.Delete:
+            items = self.doc_scene.selectedItems()
+            for item in items:
+                self.graphic_items[self._page_navigator.currentPno()].pop(id(item))
+                self.doc_scene.removeItem(item)
+
+    def loadGraphicItems(self, d: dict):
+        self.graphic_items = d
+
+    def getGraphicItems(self) -> dict:
+        return self.graphic_items
     
     def getSelection(self, pno: int, a0: QtCore.QPointF, b1: QtCore.QPointF) -> TextSelection:
         """Return TextSelection from selection points"""
@@ -342,20 +366,21 @@ class PdfViewer(QtWidgets.QWidget):
         # Toolbar button
         self.mouse_action_group = QtGui.QActionGroup(self)
         self.mouse_action_group.setExclusionPolicy(QtGui.QActionGroup.ExclusionPolicy.ExclusiveOptional)
+        self.mouse_action_group.triggered.connect(self.triggerMouseAction)
 
         self.text_selector = QtGui.QAction(QtGui.QIcon(':text-block'), "Text Selection", self)
         self.text_selector.setCheckable(True)
         self.text_selector.setShortcut(QtGui.QKeySequence("ctrl+alt+t"))
-        self.text_selector.triggered.connect(lambda: self.triggerMouseAction(MouseInteraction.InteractionType.TEXTSELECTION))
+        self.text_selector.triggered.connect(self.triggerMouseAction)
 
         self.capture_area = QtGui.QAction(QtGui.QIcon(':capture_area'), "Capture", self)
         self.capture_area.setCheckable(True)
         self.capture_area.setShortcut(QtGui.QKeySequence("ctrl+alt+s"))
-        self.capture_area.triggered.connect(lambda: self.triggerMouseAction(MouseInteraction.InteractionType.SCREENCAPTURE))
+        self.capture_area.triggered.connect(lambda: self.triggerMouseAction)
 
         self.mark_pen = QtGui.QAction(QtGui.QIcon(':mark_pen'), "Mark Text", self)
         self.mark_pen.setCheckable(True)
-        self.mark_pen.triggered.connect(lambda: self.triggerMouseAction(MouseInteraction.InteractionType.HIGHLIGHT))
+        self.mark_pen.triggered.connect(lambda: self.triggerMouseAction)
 
         self.mouse_action_group.addAction(self.text_selector)
         self.mouse_action_group.addAction(self.capture_area)
@@ -466,8 +491,16 @@ class PdfViewer(QtWidgets.QWidget):
         self.onFoldLeftSidebarTriggered()
 
     @Slot()
-    def triggerMouseAction(self, action: MouseInteraction.InteractionType):
-        self.pdfview.mouse_interaction.interaction = action
+    def triggerMouseAction(self):
+        if self.text_selector.isChecked():
+            self.pdfview.mouse_interaction.interaction = MouseInteraction.InteractionType.TEXTSELECTION
+        elif self.capture_area.isChecked():
+            self.pdfview.mouse_interaction.interaction = MouseInteraction.InteractionType.SCREENCAPTURE
+        elif self.mark_pen.isChecked():
+            self.pdfview.mouse_interaction.interaction = MouseInteraction.InteractionType.HIGHLIGHT
+        else:
+            self.pdfview.mouse_interaction.interaction = MouseInteraction.InteractionType.NONE
+
 
     @Slot(str)
     def onSearchFound(self, count: str):
